@@ -1,0 +1,555 @@
+//Users/mac/crimemap/frontend/src/components/MapView.jsx
+import { useEffect, useRef, useState, useCallback } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import 'leaflet.markercluster';
+import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal } from 'lucide-react';
+import ReportForm      from './ReportForm';
+import ReportList      from './ReportList';
+import ConfirmToast    from './ConfirmToast';
+import PredictPanel    from './PredictPanel';
+import AnalyticaPanel  from './AnalyticaPanel';
+import HistorialPanel  from './HistorialPanel';
+import FilterPanel     from './FilterPanel';
+import { useDeviceId } from '../hooks/useDeviceId';
+import { getReports, getHeatmap, getNearby, getZonasVerificadas } from '../api/reports';
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+const TIPO_COLORS = {
+  'Robo':'#E24B4A','Asalto':'#BA7517',
+  'Punto GDO':'#534AB7','Vandalismo':'#1D9E75','Otro':'#888',
+};
+
+const isMobile = () => window.innerWidth < 768;
+
+export default function MapView() {
+  const zonaLayers = useRef([]);
+  const mapRef        = useRef(null);
+  const mapInstance   = useRef(null);
+  const heatLayer     = useRef(null);
+  const clusterGroup  = useRef(null);
+  const gridLayers    = useRef([]);
+  const formMarker    = useRef(null);
+  const deviceId      = useDeviceId();
+
+  const [reports,      setReports]      = useState([]);
+  const [formPos,      setFormPos]      = useState(null);
+  const [nearbyList,   setNearbyList]   = useState([]);
+  const [showHeat,     setShowHeat]     = useState(true);
+  const [showCluster,  setShowCluster]  = useState(true);
+  const [activeTab,    setActiveTab]    = useState('mapa');
+  const [loading,      setLoading]      = useState(false);
+  const [mobile,       setMobile]       = useState(isMobile());
+  const [mobilePanel,  setMobilePanel]  = useState(null); // 'menu' | 'lista' | null
+  const [filtros,      setFiltros]      = useState({
+    dias: 30,
+    tipos: [],
+    severidadMin: 1,
+    estados: ['aprobado', 'pendiente'],
+  });
+
+  const filtrosRef = useRef(filtros);
+  useEffect(() => { filtrosRef.current = filtros; }, [filtros]);
+
+  useEffect(() => {
+    const handleResize = () => setMobile(isMobile());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (mapInstance.current) return;
+    const map = L.map(mapRef.current, { center:[-2.1894,-79.8891], zoom:13 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:'© OpenStreetMap contributors',
+    }).addTo(map);
+
+    const mcg = L.markerClusterGroup({
+      maxClusterRadius:80, spiderfyOnMaxZoom:true, showCoverageOnHover:false,
+      iconCreateFunction:(cluster) => {
+        const count = cluster.getChildCount();
+        const size  = count>50?56:count>20?44:34;
+        const bg    = count>50?'#A32D2D':count>20?'#BA7517':'#E24B4A';
+        return L.divIcon({
+          html:`<div style="width:${size}px;height:${size}px;border-radius:50%;
+            background:${bg};color:#fff;font-weight:600;font-size:${size>44?14:12}px;
+            display:flex;align-items:center;justify-content:center;
+            border:3px solid rgba(255,255,255,.8);box-shadow:0 2px 8px rgba(0,0,0,.3)">${count}</div>`,
+          className:'', iconSize:[size,size], iconAnchor:[size/2,size/2],
+        });
+      },
+    });
+    map.addLayer(mcg);
+    clusterGroup.current = mcg;
+    mapInstance.current  = map;
+
+    map.on('dblclick', (e) => {
+      e.originalEvent.preventDefault();
+      placeFormMarker(map, e.latlng.lat, e.latlng.lng);
+      setFormPos({ lat:e.latlng.lat, lng:e.latlng.lng });
+      setMobilePanel(null);
+    });
+    map.on('moveend', () => loadReports(map));
+    loadReports(map);
+    loadHeatmap(map);
+    loadZonasVerificadas(map);
+  }, []);
+
+  // Verificar denuncias cercanas al cargar
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      try {
+        const nearby = await getNearby(latitude, longitude);
+        const misIds       = JSON.parse(localStorage.getItem('crimemap_historial') || '[]').map(r => r.id);
+        const confirmadas  = JSON.parse(localStorage.getItem('crimemap_confirmed') || '[]');
+        const filtered     = nearby.filter(r => !misIds.includes(r.id) && !confirmadas.includes(r.id));
+        if (filtered.length > 0) setNearbyList(filtered);
+      } catch {}
+    }, () => {}, { enableHighAccuracy: true, timeout: 5000 });
+  }, []);
+
+  const placeFormMarker = (map, lat, lng) => {
+    if (formMarker.current) formMarker.current.remove();
+    const icon = L.divIcon({
+      className:'',
+      html:`<div style="width:16px;height:16px;border-radius:50%;
+        background:#E24B4A;border:3px solid white;
+        box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>`,
+      iconSize:[16,16], iconAnchor:[8,8],
+    });
+    formMarker.current = L.marker([lat,lng],{icon}).addTo(map);
+  };
+
+  const loadZonasVerificadas = async (map) => {
+    try {
+      const zonas = await getZonasVerificadas();
+      zonaLayers.current.forEach(l => l.remove());
+      zonaLayers.current = [];
+
+      zonas.forEach(z => {
+        const circle = L.circle([z.lat, z.lng], {
+          radius: z.radio_metros,
+          color: '#534AB7',
+          fillColor: '#534AB7',
+          fillOpacity: 0.10,
+          weight: 2,
+          dashArray: '4,4',
+        }).bindPopup(`
+          <b>⚠️ Zona de concentración verificada</b><br>
+          Tipo predominante: ${z.tipo_predominante}<br>
+          <small>${z.total_reportes} denuncias en esta área</small>
+        `).addTo(map);
+        zonaLayers.current.push(circle);
+      });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleMoveMap = (lat, lng) => {
+    if (!mapInstance.current) return;
+    mapInstance.current.setView([lat,lng], 16);
+    placeFormMarker(mapInstance.current, lat, lng);
+    setFormPos({ lat, lng });
+    setMobilePanel(null);
+  };
+
+  const loadReports = useCallback(async (map) => {
+    try {
+      setLoading(true);
+      const b = map.getBounds();
+      const bounds = `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`;
+      const data   = await getReports(bounds, filtrosRef.current);
+      setReports(data);
+      updateMarkers(data);
+    } catch(e) { console.error(e); }
+    finally { setLoading(false); }
+  }, []);
+
+  // Recargar cuando cambian los filtros
+  useEffect(() => {
+    if (mapInstance.current) loadReports(mapInstance.current);
+  }, [filtros, loadReports]);
+
+  const updateMarkers = (data) => {
+    if (!clusterGroup.current) return;
+    clusterGroup.current.clearLayers();
+    data.forEach(r => {
+      const color  = TIPO_COLORS[r.tipo] || '#888';
+      const esPend = r.estado === 'pendiente';
+      const icon   = L.divIcon({
+        className:'',
+        html:`<div style="position:relative;width:12px;height:12px;border-radius:50%;
+          background:${color};border:2px solid white;opacity:${esPend ? 0.55 : 1};
+          box-shadow:0 1px 3px rgba(0,0,0,.4)">
+          ${esPend ? '<div style="position:absolute;top:-4px;right:-4px;font-size:9px;">⏳</div>' : ''}
+        </div>`,
+        iconSize:[12,12], iconAnchor:[6,6],
+      });
+      const marker = L.marker([r.lat,r.lng],{icon}).bindPopup(`
+        <b>${r.tipo}</b> ${esPend
+          ? '<span style="color:#BA7517;font-size:11px;">(pendiente de revisión)</span>'
+          : '<span style="color:#1D9E75;font-size:11px;">✓ verificado</span>'}<br>
+        ${r.descripcion||'<i>Sin descripción</i>'}<br>
+        <small>${r.confirmaciones} confirmaciones</small>
+      `);
+      clusterGroup.current.addLayer(marker);
+    });
+  };
+
+  const loadHeatmap = async (map) => {
+    try {
+      const { points } = await getHeatmap();
+      if (!points.length) return;
+      await import('leaflet.heat');
+      if (heatLayer.current) heatLayer.current.remove();
+      heatLayer.current = L.heatLayer(points,{
+        radius:25, blur:20, maxZoom:17,
+        gradient:{ 0.2:'#1D9E75', 0.5:'#BA7517', 0.8:'#E24B4A' },
+      }).addTo(map);
+    } catch(e) { console.error(e); }
+  };
+
+  const toggleHeatmap = () => {
+    if (!heatLayer.current||!mapInstance.current) return;
+    if (showHeat) heatLayer.current.remove();
+    else heatLayer.current.addTo(mapInstance.current);
+    setShowHeat(!showHeat);
+  };
+
+  const toggleClusters = () => {
+    if (!clusterGroup.current||!mapInstance.current) return;
+    if (showCluster) mapInstance.current.removeLayer(clusterGroup.current);
+    else mapInstance.current.addLayer(clusterGroup.current);
+    setShowCluster(!showCluster);
+  };
+
+  const handleGridData = (zonas) => {
+    gridLayers.current.forEach(l => l.remove());
+    gridLayers.current = [];
+    if (!zonas||!mapInstance.current) return;
+    zonas.forEach(z => {
+      const opacity = z.nivel_riesgo==='ALTO'?0.5:z.nivel_riesgo==='MEDIO'?0.3:0.1;
+      if (opacity < 0.15) return;
+      const rect = L.rectangle(
+        [[z.lat-0.004,z.lng-0.004],[z.lat+0.004,z.lng+0.004]],
+        { color:z.color, fillColor:z.color, fillOpacity:opacity, weight:0 }
+      ).bindPopup(`<b>Predicción</b><br>Nivel: <b style="color:${z.color}">${z.nivel_riesgo}</b><br>Eventos: ${z.robos_estimados}`)
+       .addTo(mapInstance.current);
+      gridLayers.current.push(rect);
+    });
+  };
+
+  const handleReportCreated = async () => {
+    if (formMarker.current) { formMarker.current.remove(); formMarker.current = null; }
+    setFormPos(null);
+    if (mapInstance.current) loadReports(mapInstance.current);
+    if (formPos) {
+      const nearby = await getNearby(formPos.lat, formPos.lng);
+      const misIds       = JSON.parse(localStorage.getItem('crimemap_historial') || '[]').map(r => r.id);
+      const confirmadas  = JSON.parse(localStorage.getItem('crimemap_confirmed') || '[]');
+      const filtered     = nearby.filter(r => !misIds.includes(r.id) && !confirmadas.includes(r.id));
+      if (filtered.length > 0) setNearbyList(filtered);
+    }
+  };
+
+  const handleClose = () => {
+    if (formMarker.current) { formMarker.current.remove(); formMarker.current = null; }
+    setFormPos(null);
+  };
+
+  const openNewReport = () => {
+    const c = mapInstance.current?.getCenter();
+    if (c) { placeFormMarker(mapInstance.current, c.lat, c.lng); setFormPos({ lat:c.lat, lng:c.lng }); }
+    setMobilePanel(null);
+    setActiveTab('mapa');
+  };
+
+  const renderLeftPanel = () => {
+    if (activeTab==='analitica')  return <AnalyticaPanel reports={reports}/>;
+    if (activeTab==='prediccion') return <PredictPanel map={mapInstance.current} onGridData={handleGridData}/>;
+    if (activeTab==='historial')  return <HistorialPanel map={mapInstance.current}/>;
+    return null;
+  };
+
+  // ── MOBILE LAYOUT ──────────────────────────────────────────
+  if (mobile) {
+    return (
+      <div style={{ width:'100vw', height:'100vh', position:'relative', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
+
+        {/* Mapa ocupa toda la pantalla */}
+        <div ref={mapRef} style={{ width:'100%', height:'100%' }}/>
+
+        {/* Header móvil */}
+        <div style={mStyles.header}>
+          <div style={mStyles.headerLogo}>
+            <Map size={16} color="#E24B4A" strokeWidth={2.5}/>
+            <span>CrimeMap GYE</span>
+          </div>
+          <div style={mStyles.headerCount}>
+            <span style={mStyles.countBadge}>{reports.length}</span>
+          </div>
+        </div>
+
+        {/* Panel de filtros móvil */}
+        <div style={{ position:'absolute', top:64, right:12, zIndex:999 }}>
+          <FilterPanel filtros={filtros} onChange={setFiltros} />
+        </div>
+
+        {loading && <div style={mStyles.loading}>Actualizando...</div>}
+
+        {/* Toast de confirmación */}
+        {nearbyList.length > 0 && (
+          <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
+        )}
+
+        {/* Formulario de denuncia */}
+        {formPos && (
+          <div style={mStyles.formOverlay}>
+            <ReportForm
+              lat={formPos.lat} lng={formPos.lng}
+              deviceId={deviceId}
+              onCreated={handleReportCreated}
+              onClose={handleClose}
+              onMoveMap={handleMoveMap}
+            />
+          </div>
+        )}
+
+        {/* Panel deslizable desde abajo */}
+        {mobilePanel && (
+          <div style={mStyles.bottomSheet}>
+            <div style={mStyles.bottomSheetHandle}/>
+            <div style={mStyles.bottomSheetHeader}>
+              <span style={mStyles.bottomSheetTitle}>
+                {mobilePanel === 'lista' && 'Denuncias visibles'}
+                {mobilePanel === 'menu'  && 'Menú'}
+              </span>
+              <button style={mStyles.bottomSheetClose} onClick={() => setMobilePanel(null)}>
+                <X size={16} strokeWidth={2}/>
+              </button>
+            </div>
+            <div style={mStyles.bottomSheetContent}>
+              {mobilePanel === 'lista' && (
+                <ReportList reports={reports} map={mapInstance.current}/>
+              )}
+              {mobilePanel === 'menu' && (
+                <div style={mStyles.menuGrid}>
+                  {[
+                    { id:'analitica',  label:'Analítica',  Icon:BarChart2  },
+                    { id:'prediccion', label:'Predicción', Icon:Clock      },
+                    { id:'historial',  label:'Historial',  Icon:History    },
+                  ].map(({ id, label, Icon }) => (
+                    <div key={id} style={mStyles.menuItem}
+                      onClick={() => { setActiveTab(id); setMobilePanel('panel'); }}>
+                      <Icon size={22} color="#E24B4A" strokeWidth={1.8}/>
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                  <div style={mStyles.menuItem} onClick={toggleHeatmap}>
+                    <Thermometer size={22} color={showHeat?'#E24B4A':'#aaa'} strokeWidth={1.8}/>
+                    <span>Heatmap {showHeat?'ON':'OFF'}</span>
+                  </div>
+                  <div style={mStyles.menuItem} onClick={toggleClusters}>
+                    <Circle size={22} color={showCluster?'#E24B4A':'#aaa'} strokeWidth={1.8}/>
+                    <span>Clusters {showCluster?'ON':'OFF'}</span>
+                  </div>
+                </div>
+              )}
+              {mobilePanel === 'panel' && (
+                <div style={{ flex:1, overflowY:'auto' }}>
+                  {renderLeftPanel()}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Leyenda */}
+        <div style={mStyles.legend}>
+          {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
+            <div key={tipo} style={mStyles.legendItem}>
+              <div style={{width:8,height:8,borderRadius:'50%',background:color,flexShrink:0}}/>
+              <span>{tipo}</span>
+            </div>
+          ))}
+          <div style={mStyles.legendItem}>
+            <div style={{width:8,height:8,borderRadius:'50%',border:'2px dashed #534AB7',flexShrink:0}}/>
+            <span>Zona verificada</span>
+          </div>
+        </div>
+
+        {/* Tab bar inferior */}
+        <div style={mStyles.tabBar}>
+          <button style={mStyles.tabBtn} onClick={() => setMobilePanel(mobilePanel==='menu'?null:'menu')}>
+            <SlidersHorizontal size={20} color={mobilePanel==='menu'?'#E24B4A':'#888'} strokeWidth={1.8}/>
+            <span style={{...mStyles.tabLabel, color:mobilePanel==='menu'?'#E24B4A':'#888'}}>Menú</span>
+          </button>
+          <button style={mStyles.tabBtnCenter} onClick={openNewReport}>
+            <Plus size={24} color="#fff" strokeWidth={2.5}/>
+          </button>
+          <button style={mStyles.tabBtn} onClick={() => setMobilePanel(mobilePanel==='lista'?null:'lista')}>
+            <List size={20} color={mobilePanel==='lista'?'#E24B4A':'#888'} strokeWidth={1.8}/>
+            <span style={{...mStyles.tabLabel, color:mobilePanel==='lista'?'#E24B4A':'#888'}}>Lista</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DESKTOP LAYOUT ─────────────────────────────────────────
+  return (
+    <div style={{ display:'flex', height:'100vh', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
+      <aside style={styles.sidebarLeft}>
+        <div style={styles.logo}>
+          <Map size={18} color="#E24B4A" strokeWidth={2.5}/>
+          <span>CrimeMap GYE</span>
+        </div>
+        <nav style={styles.nav}>
+          <div style={styles.navSection}>Vistas</div>
+          {[
+            { id:'mapa',       label:'Mapa en vivo', Icon:Map       },
+            { id:'analitica',  label:'Analítica',    Icon:BarChart2  },
+            { id:'prediccion', label:'Predicción',   Icon:Clock     },
+            { id:'historial',  label:'Historial',    Icon:History   },
+          ].map(({ id, label, Icon }) => (
+            <div key={id}
+              style={{...styles.navItem,...(activeTab===id?styles.navItemActive:{})}}
+              onClick={() => setActiveTab(id)}>
+              <Icon size={15} strokeWidth={1.8}/>
+              <span>{label}</span>
+            </div>
+          ))}
+          <div style={styles.navSection}>Denuncias</div>
+          <div style={styles.navItem} onClick={openNewReport}>
+            <Plus size={15} strokeWidth={1.8}/>
+            <span>Nueva denuncia</span>
+          </div>
+          <div style={styles.navSection}>Capas</div>
+          {[
+            { label:'Heatmap',  Icon:Thermometer, active:showHeat,    toggle:toggleHeatmap  },
+            { label:'Clusters', Icon:Circle,      active:showCluster, toggle:toggleClusters },
+          ].map(({ label, Icon, active, toggle }) => (
+            <div key={label}
+              style={{...styles.navItem,...(active?styles.navItemActive:{})}}
+              onClick={toggle}>
+              <Icon size={15} strokeWidth={1.8}/>
+              <span>{label}</span>
+              {active && <div style={styles.activeDot}/>}
+            </div>
+          ))}
+        </nav>
+        {activeTab !== 'mapa' && (
+          <div style={styles.panelWrapper}>{renderLeftPanel()}</div>
+        )}
+        <div style={styles.mapInfo}>
+          <div style={styles.mapInfoLabel}>Denuncias visibles</div>
+          <div style={styles.mapInfoCount}>{reports.length}</div>
+        </div>
+      </aside>
+
+      <div style={{ flex:1, position:'relative' }}>
+        <div ref={mapRef} style={{ width:'100%', height:'100%' }}/>
+        {activeTab==='prediccion' && (
+          <div style={styles.predictBanner}>
+            Modo predicción — selecciona fecha, hora y modelo en el panel
+          </div>
+        )}
+        {loading && <div style={styles.loading}>Actualizando...</div>}
+        <FilterPanel filtros={filtros} onChange={setFiltros} />
+        <div style={styles.hint}>
+          <MousePointerClick size={13} strokeWidth={1.8}/>
+          <span>Doble clic para denunciar</span>
+        </div>
+        {formPos && (
+          <div style={styles.formOverlay}>
+            <ReportForm
+              lat={formPos.lat} lng={formPos.lng}
+              deviceId={deviceId}
+              onCreated={handleReportCreated}
+              onClose={handleClose}
+              onMoveMap={handleMoveMap}
+            />
+          </div>
+        )}
+        {nearbyList.length > 0 && (
+          <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
+        )}
+        <div style={styles.legend}>
+          {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
+            <div key={tipo} style={styles.legendItem}>
+              <div style={{...styles.legendDot, background:color}}/>
+              <span>{tipo}</span>
+            </div>
+          ))}
+          <div style={styles.legendItem}>
+            <div style={{...styles.legendDot, border:'2px dashed #534AB7', background:'transparent'}}/>
+            <span>Zona verificada</span>
+          </div>
+        </div>
+      </div>
+      <ReportList reports={reports} map={mapInstance.current}/>
+    </div>
+  );
+}
+
+// ── MOBILE STYLES ───────────────────────────────────────────
+const mStyles = {
+  header:            { position:'absolute', top:0, left:0, right:0, zIndex:1000, background:'rgba(255,255,255,0.95)', backdropFilter:'blur(8px)', padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid #eee' },
+  headerLogo:        { display:'flex', alignItems:'center', gap:'8px', fontWeight:700, fontSize:'15px', color:'#1a1a1a' },
+  headerCount:       { display:'flex', alignItems:'center' },
+  countBadge:        { background:'#E24B4A', color:'#fff', fontSize:'12px', fontWeight:700, padding:'2px 8px', borderRadius:'10px' },
+  loading:           { position:'absolute', top:'60px', left:'50%', transform:'translateX(-50%)', background:'#fff', padding:'6px 14px', borderRadius:'20px', fontSize:'12px', boxShadow:'0 2px 8px rgba(0,0,0,.15)', zIndex:1000 },
+  formOverlay:       { position:'absolute', top:'60px', left:'50%', transform:'translateX(-50%)', zIndex:2000, width:'calc(100vw - 32px)', maxWidth:'320px' },
+  legend:            { position:'absolute', bottom:'90px', left:'12px', zIndex:1000, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(8px)', borderRadius:'8px', padding:'6px 8px', display:'flex', flexDirection:'column', gap:'3px' },
+  legendItem:        { display:'flex', alignItems:'center', gap:'5px', fontSize:'10px', color:'#555' },
+  bottomSheet:       { position:'absolute', bottom:'72px', left:0, right:0, zIndex:1500, background:'#fff', borderRadius:'16px 16px 0 0', boxShadow:'0 -4px 20px rgba(0,0,0,.15)', maxHeight:'60vh', display:'flex', flexDirection:'column' },
+  bottomSheetHandle: { width:'36px', height:'4px', background:'#eee', borderRadius:'2px', margin:'10px auto 0' },
+  bottomSheetHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 16px 8px' },
+  bottomSheetTitle:  { fontWeight:600, fontSize:'14px' },
+  bottomSheetClose:  { background:'none', border:'none', cursor:'pointer', color:'#aaa', display:'flex', alignItems:'center' },
+  bottomSheetContent:{ flex:1, overflowY:'auto' },
+  menuGrid:          { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', padding:'12px 16px 20px' },
+  menuItem:          { display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', padding:'14px 8px', background:'#fafafa', borderRadius:'12px', cursor:'pointer', fontSize:'12px', color:'#555', fontWeight:500 },
+tabBar: { 
+  position:'absolute', bottom:0, left:0, right:0, zIndex:1000, 
+  background:'rgba(255,255,255,0.96)', backdropFilter:'blur(8px)', 
+  borderTop:'1px solid #eee', display:'flex', alignItems:'center', 
+  justifyContent:'space-around', 
+  padding:'8px 16px env(safe-area-inset-bottom, 20px)',
+  height:'auto',
+  paddingBottom:'max(20px, env(safe-area-inset-bottom))',
+},  tabBtn:            { display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', background:'none', border:'none', cursor:'pointer', padding:'4px 16px' },
+  tabBtnCenter:      { width:'52px', height:'52px', borderRadius:'50%', background:'#E24B4A', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 12px rgba(226,75,74,.4)' },
+  tabLabel:          { fontSize:'10px', fontWeight:500 },
+};
+
+// ── DESKTOP STYLES ──────────────────────────────────────────
+const styles = {
+  sidebarLeft:   { width:'220px', background:'#fff', borderRight:'1px solid #eee', display:'flex', flexDirection:'column', zIndex:1000, overflow:'hidden' },
+  logo:          { padding:'16px', fontWeight:700, fontSize:'15px', borderBottom:'1px solid #eee', color:'#1a1a1a', display:'flex', alignItems:'center', gap:'8px', flexShrink:0 },
+  nav:           { padding:'8px', flexShrink:0 },
+  navSection:    { fontSize:'10px', fontWeight:600, color:'#ccc', textTransform:'uppercase', padding:'12px 8px 4px', letterSpacing:'.06em' },
+  navItem:       { padding:'8px 10px', borderRadius:'8px', cursor:'pointer', fontSize:'13px', color:'#666', margin:'1px 0', display:'flex', alignItems:'center', gap:'8px' },
+  navItemActive: { background:'#fff0f0', color:'#E24B4A', fontWeight:500 },
+  activeDot:     { width:'6px', height:'6px', borderRadius:'50%', background:'#E24B4A', marginLeft:'auto' },
+  panelWrapper:  { flex:1, overflowY:'auto', borderTop:'1px solid #eee' },
+  mapInfo:       { padding:'12px 16px', borderTop:'1px solid #eee', flexShrink:0 },
+  mapInfoLabel:  { fontSize:'11px', color:'#aaa' },
+  mapInfoCount:  { fontSize:'28px', fontWeight:700, color:'#E24B4A' },
+  predictBanner: { position:'absolute', top:'12px', left:'50%', transform:'translateX(-50%)', background:'#534AB7', color:'#fff', fontSize:'11px', fontWeight:500, padding:'7px 16px', borderRadius:'20px', zIndex:1000, whiteSpace:'nowrap' },
+  loading:       { position:'absolute', top:'12px', left:'50%', transform:'translateX(-50%)', background:'#fff', padding:'6px 14px', borderRadius:'20px', fontSize:'12px', boxShadow:'0 2px 8px rgba(0,0,0,.15)', zIndex:1000 },
+  hint:          { position:'absolute', bottom:'24px', right:'12px', zIndex:1000, background:'rgba(0,0,0,.5)', color:'#fff', fontSize:'11px', padding:'5px 10px', borderRadius:'20px', display:'flex', alignItems:'center', gap:'5px' },
+  formOverlay:   { position:'absolute', top:'60px', left:'50%', transform:'translateX(-50%)', zIndex:2000 },
+  legend:        { position:'absolute', bottom:'24px', left:'12px', zIndex:1000, background:'#fff', borderRadius:'8px', padding:'8px 10px', boxShadow:'0 2px 8px rgba(0,0,0,.12)', display:'flex', flexDirection:'column', gap:'4px' },
+  legendItem:    { display:'flex', alignItems:'center', gap:'6px', fontSize:'11px', color:'#555' },
+  legendDot:     { width:'10px', height:'10px', borderRadius:'50%' },
+};

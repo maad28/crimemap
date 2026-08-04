@@ -1,0 +1,117 @@
+//Users/mac/crimemap/backend-express/src/routes/admin.js
+const express   = require('express');
+const pool      = require('../db/pool');
+const adminAuth = require('../middleware/adminAuth');
+const router    = express.Router();
+
+router.use(adminAuth);
+
+router.get('/devices', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT device_hash,
+             COUNT(*)                 AS total_denuncias,
+             MAX(created_at)          AS ultima_actividad,
+             MIN(created_at)          AS primera_actividad,
+             array_agg(DISTINCT tipo) AS tipos
+      FROM reports
+      GROUP BY device_hash
+      ORDER BY total_denuncias DESC`);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener devices' });
+  }
+});
+
+router.get('/stats', async (req, res) => {
+  try {
+    const { rows: [stats] } = await pool.query(`
+      SELECT COUNT(*)                                                      AS total_reportes,
+             COUNT(DISTINCT device_hash)                                   AS dispositivos_unicos,
+             COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24h')  AS ultimas_24h,
+             COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1h')   AS ultima_hora
+      FROM reports`);
+    const { rows: porTipo } = await pool.query(
+      `SELECT tipo, COUNT(*) AS total FROM reports GROUP BY tipo ORDER BY total DESC`);
+    res.json({ ...stats, por_tipo: porTipo });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener stats' });
+  }
+});
+
+router.delete('/devices/:hash', async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM reports WHERE device_hash = $1', [req.params.hash]);
+    res.json({ ok: true, eliminadas: rowCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al eliminar device' });
+  }
+});
+
+module.exports = router;
+
+// GET /api/admin/tendencia?dias=30
+router.get('/tendencia', async (req, res) => {
+  try {
+    const dias = parseInt(req.query.dias) || 30;
+    const { rows } = await pool.query(`
+      SELECT DATE(created_at) AS fecha,
+             COUNT(*)          AS total,
+             COUNT(*) FILTER (WHERE tipo = 'Robo')      AS robos,
+             COUNT(*) FILTER (WHERE tipo = 'Asalto')    AS asaltos,
+             COUNT(*) FILTER (WHERE tipo = 'Punto GDO') AS gdo
+      FROM reports
+      WHERE created_at > NOW() - INTERVAL '${dias} days'
+      GROUP BY DATE(created_at)
+      ORDER BY fecha ASC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error tendencia' });
+  }
+});
+
+// GET /api/admin/zonas-riesgo
+router.get('/zonas-riesgo', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        ROUND(ST_Y(ubicacion::geometry)::numeric, 2) AS lat_zona,
+        ROUND(ST_X(ubicacion::geometry)::numeric, 2) AS lng_zona,
+        COUNT(*)                                      AS total,
+        AVG(severidad)                                AS severidad_promedio,
+        SUM(confirmaciones)                           AS confirmaciones_total,
+        array_agg(DISTINCT tipo)                      AS tipos
+      FROM reports
+      GROUP BY lat_zona, lng_zona
+      ORDER BY total DESC
+      LIMIT 20
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error zonas' });
+  }
+});
+
+// GET /api/admin/confirmaciones-tipo
+router.get('/confirmaciones-tipo', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT tipo,
+             COUNT(*)                          AS total_denuncias,
+             SUM(confirmaciones)               AS total_confirmaciones,
+             ROUND(AVG(confirmaciones)::numeric, 2) AS promedio_confirmaciones,
+             ROUND(
+               100.0 * SUM(CASE WHEN confirmaciones > 0 THEN 1 ELSE 0 END) / COUNT(*),
+               1
+             )                                 AS tasa_confirmacion_pct
+      FROM reports
+      GROUP BY tipo
+      ORDER BY tasa_confirmacion_pct DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error confirmaciones' });
+  }
+});
