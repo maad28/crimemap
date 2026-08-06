@@ -1,9 +1,15 @@
+//frontend/src/pages/AutoridadReportes.jsx
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, MapPin, RotateCcw, Map as MapIcon } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, MapPin, RotateCcw, Map as MapIcon, FileDown, FileText } from 'lucide-react';
 import MapModal from '../components/MapModal';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
-const TIPOS = ['Robo', 'Asalto', 'Punto GDO', 'Vandalismo', 'Otro'];
-const PERIODOS = [
+const TIPOS = [
+  'Robo a persona', 'Robo a domicilio', 'Robo a vehículo',
+  'Asalto a mano armada', 'Homicidio', 'Extorsión',
+  'Vandalismo', 'Punto GDO', 'Otro',
+];const PERIODOS = [
   { label: 'Últimas 24h',      valor: 1   },
   { label: 'Últimos 7 días',   valor: 7   },
   { label: 'Últimos 30 días',  valor: 30  },
@@ -81,6 +87,67 @@ export default function AutoridadReportes({ secret }) {
     await fetch(`${API}/${id}/${accion}`, { method: 'POST', headers });
     cargarReportes();
   };
+  const exportarDatos = async () => {
+  const params = new URLSearchParams();
+  params.set('tab', tab);
+  if (dias) params.set('dias', dias);
+  if (filtroTipo) params.set('tipo', filtroTipo);
+  if (severidadMin > 1) params.set('severidad_min', severidadMin);
+  params.set('orden', orden);
+
+  const res = await fetch(`${API}/exportar?${params}`, { headers });
+  return res.json();
+};
+
+const descargarCSV = async () => {
+  const datos = await exportarDatos();
+  let csv = `CrimeMap GYE — Reportes (${tab})\n`;
+  csv += `Generado: ${new Date().toLocaleString('es-EC')}\n`;
+  csv += `Filtros: tipo=${filtroTipo || 'todos'}, dias=${dias || 'todo'}, severidad_min=${severidadMin}\n\n`;
+  csv += 'ID,Tipo,Descripción,Severidad,Confirmaciones,Estado,Lat,Lng,Fecha\n';
+  datos.forEach(r => {
+    const desc = (r.descripcion || '').replace(/,/g, ';').replace(/\n/g, ' ');
+    csv += `${r.id},${r.tipo},"${desc}",${r.severidad},${r.confirmaciones},${r.estado},${r.lat},${r.lng},${r.created_at}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `crimemap_reportes_${tab}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const descargarPDF = async () => {
+  const datos = await exportarDatos();
+  const doc = new jsPDF();
+
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.text(`CrimeMap GYE — Reportes (${tab})`, 14, 18);
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(120);
+  doc.text(`Generado: ${new Date().toLocaleString('es-EC')}`, 14, 24);
+  doc.text(`Filtros: tipo=${filtroTipo || 'todos'} | días=${dias || 'todo'} | severidad mín=${severidadMin}`, 14, 29);
+  doc.setTextColor(0);
+
+  autoTable(doc, {
+    startY: 35,
+    head: [['ID', 'Tipo', 'Sev.', 'Confirm.', 'Estado', 'Fecha']],
+    body: datos.map(r => [
+      r.id, r.tipo, r.severidad, r.confirmaciones, r.estado,
+      new Date(r.created_at).toLocaleDateString('es-EC'),
+    ]),
+    theme: 'grid',
+    headStyles: { fillColor: [26, 26, 26] },
+    styles: { fontSize: 8 },
+    margin: { left: 14, right: 14 },
+  });
+
+  doc.save(`crimemap_reportes_${tab}_${new Date().toISOString().slice(0,10)}.pdf`);
+};
 
   return (
     <div>
@@ -100,29 +167,42 @@ export default function AutoridadReportes({ secret }) {
         ))}
       </div>
 
-      <div style={styles.filtersRow}>
-        <select value={dias} onChange={e => setDias(e.target.value)} style={styles.select}>
-          {PERIODOS.map(p => (
-            <option key={p.label} value={p.valor}>{p.label}</option>
-          ))}
-        </select>
+      <div style={styles.toolbarRow}>
+  <div style={styles.filtersRow}>
+    <select value={dias} onChange={e => setDias(e.target.value)} style={styles.select}>
+      {PERIODOS.map(p => (
+        <option key={p.label} value={p.valor}>{p.label}</option>
+      ))}
+    </select>
 
-        <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={styles.select}>
-          <option value="">Todos los tipos</option>
-          {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+    <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={styles.select}>
+      <option value="">Todos los tipos</option>
+      {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+    </select>
 
-        <select value={orden} onChange={e => setOrden(e.target.value)} style={styles.select}>
-          <option value="recientes">Más recientes</option>
-          <option value="antiguos">Más antiguos</option>
-        </select>
+    <select value={orden} onChange={e => setOrden(e.target.value)} style={styles.select}>
+      <option value="recientes">Más recientes</option>
+      <option value="antiguos">Más antiguos</option>
+    </select>
 
-        <div style={styles.sevFilter}>
-          <span style={{ fontSize: 12, color: '#888' }}>Severidad mín: {severidadMin}</span>
-          <input type="range" min="1" max="5" value={severidadMin}
-            onChange={e => setSevMin(Number(e.target.value))} style={{ width: 100 }} />
-        </div>
-      </div>
+    <div style={styles.sevFilter}>
+      <span style={{ fontSize: 12, color: '#888' }}>Severidad mín: {severidadMin}</span>
+      <input type="range" min="1" max="5" value={severidadMin}
+        onChange={e => setSevMin(Number(e.target.value))} style={{ width: 100 }} />
+    </div>
+  </div>
+
+  <div style={styles.exportGroup}>
+    <span style={styles.exportLabel}>Exportar</span>
+    <button onClick={descargarCSV} style={styles.exportBtn}>
+      <FileDown size={14}/> CSV
+    </button>
+    <button onClick={descargarPDF} style={styles.exportBtn}>
+      <FileText size={14}/> PDF
+    </button>
+  </div>
+
+</div>
 
       {loading && <p>Cargando...</p>}
       {!loading && reportes.length === 0 && <p style={{ color: '#aaa' }}>No hay reportes con estos filtros.</p>}
@@ -222,4 +302,11 @@ const styles = {
   pageBtn:         { padding: '7px 16px', border: '1px solid #eee', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer', color: '#333' },
   pageBtnDisabled: { opacity: 0.4, cursor: 'not-allowed' },
   pageInfo:        { fontSize: 12, color: '#888' },
+  toolbarRow:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
+  filtersRow:   { display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' },
+  select:       { padding: '8px 12px', borderRadius: 20, border: '1px solid #eee', fontSize: 13, background: '#fff', color: '#333' },
+  sevFilter:    { display: 'flex', alignItems: 'center', gap: 8 },
+  exportGroup:  { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #eee', borderRadius: 20, padding: '4px 6px 4px 14px' },
+  exportLabel:  { fontSize: 12, color: '#aaa', marginRight: 2 },
+  exportBtn:    { display: 'flex', alignItems: 'center', gap: 6, background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 16, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
 };

@@ -3,11 +3,15 @@ import { MapPin, Check, X, AlertTriangle } from 'lucide-react';
 import { confirmReport } from '../api/reports';
 
 const TIPO_ICONS = {
-  'Robo':       '🔴',
-  'Asalto':     '🟠',
-  'Punto GDO':  '🟣',
-  'Vandalismo': '🟡',
-  'Otro':       '⚪',
+  'Robo a persona':      '🔴',
+  'Robo a domicilio':    '🟤',
+  'Robo a vehículo':     '🟠',
+  'Asalto a mano armada':'🔶',
+  'Homicidio':           '⚫',
+  'Extorsión':           '🟣',
+  'Vandalismo':          '🟡',
+  'Punto GDO':           '🟪',
+  'Otro':                '⚪',
 };
 
 export default function ConfirmToast({ reports, onDismiss }) {

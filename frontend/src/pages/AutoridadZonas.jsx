@@ -1,3 +1,5 @@
+//frontend/src/pages/AutoridadZonas.jsx
+
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, RotateCcw, MapPinned, Users } from 'lucide-react';
 import ZoneMapModal from '../components/ZoneMapModal';

@@ -5,11 +5,15 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { TrendingUp, MapPin, Calendar, Clock } from 'lucide-react';
 
 const TIPO_COLORS = {
-  'Robo':       '#E24B4A',
-  'Asalto':     '#BA7517',
-  'Punto GDO':  '#534AB7',
-  'Vandalismo': '#1D9E75',
-  'Otro':       '#888',
+  'Robo a persona':'#E24B4A',
+  'Robo a domicilio':'#D85A30',
+  'Robo a vehículo':'#F0997B',
+  'Asalto a mano armada':'#BA7517',
+  'Homicidio':'#791F1F',
+  'Extorsión':'#993556',
+  'Vandalismo':'#1D9E75',
+  'Punto GDO':'#534AB7',
+  'Otro':'#888',
 };
 
 export default function AnalyticaPanel({ reports }) {

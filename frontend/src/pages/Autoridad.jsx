@@ -1,3 +1,4 @@
+//frontend/src/pages/Autoridad.jsx
 import { useState } from 'react';
 import AutoridadLogin from './AutoridadLogin';
 import AutoridadDashboard from './AutoridadDashboard';

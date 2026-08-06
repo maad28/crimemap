@@ -3,11 +3,15 @@ import { useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 
 const TIPO_COLORS = {
-  'Robo':       { bg:'#fff0f0', color:'#A32D2D' },
-  'Asalto':     { bg:'#faeeda', color:'#633806' },
-  'Punto GDO':  { bg:'#eeedfe', color:'#3C3489' },
-  'Vandalismo': { bg:'#e1f5ee', color:'#085041' },
-  'Otro':       { bg:'#f5f5f5', color:'#555'    },
+  'Robo a persona':       { bg:'#fff0f0', color:'#A32D2D' },
+  'Robo a domicilio':     { bg:'#fbe4d9', color:'#8a3a1c' },
+  'Robo a vehículo':      { bg:'#fdece0', color:'#b4552c' },
+  'Asalto a mano armada': { bg:'#faeeda', color:'#633806' },
+  'Homicidio':            { bg:'#f5dede', color:'#501313' },
+  'Extorsión':            { bg:'#fbeaf0', color:'#72243e' },
+  'Vandalismo':           { bg:'#e1f5ee', color:'#085041' },
+  'Punto GDO':            { bg:'#eeedfe', color:'#3C3489' },
+  'Otro':                 { bg:'#f5f5f5', color:'#555'    },
 };
 
 function timeAgo(dateStr) {
@@ -20,8 +24,8 @@ function timeAgo(dateStr) {
 
 export default function ReportList({ reports, map }) {
   const [filter, setFilter] = useState('Todos');
-  const tipos = ['Todos', 'Robo', 'Asalto', 'Punto GDO'];
-  const filtered = filter === 'Todos' ? reports : reports.filter(r => r.tipo === filter);
+const tipos = ['Todos', 'Robo a persona', 'Robo a domicilio', 'Robo a vehículo',
+               'Asalto a mano armada', 'Homicidio', 'Extorsión', 'Vandalismo', 'Punto GDO', 'Otro'];  const filtered = filter === 'Todos' ? reports : reports.filter(r => r.tipo === filter);
 
   return (
     <aside style={styles.sidebar}>
@@ -42,13 +46,15 @@ export default function ReportList({ reports, map }) {
         )}
         {filtered.map(r => {
           const tc = TIPO_COLORS[r.tipo] || TIPO_COLORS['Otro'];
+          const esConfiable = r.reputacion_puntos >= 130;
           return (
             <div key={r.id} style={styles.card}
-                 onClick={() => map?.setView([r.lat, r.lng], 16)}>
+                onClick={() => map?.setView([r.lat, r.lng], 16)}>
               <div style={styles.cardTop}>
                 <span style={{...styles.tipoBadge, background:tc.bg, color:tc.color}}>
                   {r.tipo}
                 </span>
+                {esConfiable && <span style={{ fontSize: 12 }}>⭐</span>}
                 <span style={styles.time}>{timeAgo(r.created_at)}</span>
               </div>
               {r.descripcion && <div style={styles.desc}>{r.descripcion}</div>}

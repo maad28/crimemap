@@ -24,6 +24,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/admin',   adminRouter);
 app.use('/api/authority', authorityRouter);
 app.use('/api/geocode', require('./routes/geocode'));
+app.use('/api/reporte-general', require('./routes/reportes-generales'));
 
 app.listen(PORT, () => {
   console.log(` Express corriendo en http://localhost:${PORT}`);

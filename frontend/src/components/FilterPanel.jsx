@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Filter, X } from 'lucide-react';
 
-const TIPOS = ['Robo', 'Asalto', 'Punto GDO'];
-const PERIODOS = [
+const TIPOS = [
+  'Robo a persona', 'Robo a domicilio', 'Robo a vehículo',
+  'Asalto a mano armada', 'Homicidio', 'Extorsión',
+  'Vandalismo', 'Punto GDO', 'Otro',
+];const PERIODOS = [
   { label: 'Últimas 24h', valor: 1 },
   { label: 'Últimos 7 días', valor: 7 },
   { label: 'Últimos 30 días', valor: 30 },
@@ -74,16 +77,21 @@ export default function FilterPanel({ filtros, onChange }) {
       </div>
 
       <div style={styles.section}>
-        <div style={styles.label}>Estado de verificación</div>
-        <label style={styles.checkLabel}>
-          <input type="checkbox" checked={filtros.estados.includes('aprobado')} onChange={() => toggleEstado('aprobado')} />
-          Verificado por autoridad
-        </label>
-        <label style={styles.checkLabel}>
-          <input type="checkbox" checked={filtros.estados.includes('pendiente')} onChange={() => toggleEstado('pendiente')} />
-          Pendiente de revisión
-        </label>
-      </div>
+      <div style={styles.label}>Estado de verificación</div>
+      <label style={styles.checkLabel}>
+        <input type="checkbox" checked={filtros.estados.includes('aprobado')} onChange={() => toggleEstado('aprobado')} />
+        Verificado por autoridad
+      </label>
+      <label style={styles.checkLabel}>
+        <input type="checkbox" checked={filtros.estados.includes('pendiente')} onChange={() => toggleEstado('pendiente')} />
+        Pendiente de revisión
+      </label>
+      <label style={styles.checkLabel}>
+        <input type="checkbox" checked={filtros.soloConfiables || false}
+          onChange={() => onChange({ ...filtros, soloConfiables: !filtros.soloConfiables })} />
+        ⭐ Solo reportantes confiables
+      </label>
+    </div>
     </div>
   );
 }

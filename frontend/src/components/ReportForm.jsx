@@ -3,8 +3,17 @@ import { useState, useRef, useEffect } from 'react';
 import { X, MapPin, Send, Navigation, Search } from 'lucide-react';
 import { createReport } from '../api/reports';
 
-const TIPOS = ['Robo', 'Asalto', 'Punto GDO', 'Vandalismo', 'Otro'];
-
+const TIPOS = [
+  'Robo a persona',
+  'Robo a domicilio',
+  'Robo a vehículo',
+  'Asalto a mano armada',
+  'Homicidio',
+  'Extorsión',
+  'Vandalismo',
+  'Punto GDO',
+  'Otro',
+];
 function guardarEnHistorial(reporte) {
   const saved = localStorage.getItem('crimemap_historial');
   const hist  = saved ? JSON.parse(saved) : [];
@@ -13,7 +22,7 @@ function guardarEnHistorial(reporte) {
 }
 
 export default function ReportForm({ lat, lng, deviceId, onCreated, onClose, onMoveMap }) {
-  const [tipo,        setTipo]        = useState('Robo');
+  const [tipo,        setTipo]        = useState('Robo a persona');
   const [desc,        setDesc]        = useState('');
   const [sev,         setSev]         = useState(3);
   const [loading,     setLoading]     = useState(false);
@@ -228,8 +237,7 @@ const styles = {
   suggSub:            { fontSize:'10px', color:'#aaa', marginTop:'1px' },
   locationBtn:        { width:'100%', padding:'7px', background:'#f0f7ff', border:'1px solid #cce0ff', borderRadius:'8px', color:'#0C447C', fontSize:'12px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px', marginBottom:'10px', fontWeight:500 },
   locationBtnLoading: { opacity:.6, cursor:'not-allowed' },
-  tipoGrid:           { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px', marginBottom:'10px' },
-  tipoBtn:            { padding:'6px 4px', border:'1px solid #eee', borderRadius:'8px', fontSize:'11px', cursor:'pointer', background:'#fafafa', color:'#555' },
+tipoGrid: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', marginBottom:'10px' },  tipoBtn:            { padding:'6px 4px', border:'1px solid #eee', borderRadius:'8px', fontSize:'11px', cursor:'pointer', background:'#fafafa', color:'#555' },
   tipoBtnSel:         { background:'#fff0f0', borderColor:'#E24B4A', color:'#E24B4A', fontWeight:600 },
   textarea:           { width:'100%', border:'1px solid #eee', borderRadius:'8px', padding:'6px 8px', fontSize:'12px', resize:'none', fontFamily:'inherit', marginBottom:'8px', boxSizing:'border-box' },
   sevRow:             { display:'flex', alignItems:'center', gap:'4px', marginBottom:'10px' },

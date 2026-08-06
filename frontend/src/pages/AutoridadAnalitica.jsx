@@ -1,3 +1,4 @@
+//frontend/src/pages/AutoridadAnalitica.jsx
 import { useState, useEffect } from 'react';
 import { BarChart2, TrendingUp, Map } from 'lucide-react';
 import {
@@ -6,17 +7,22 @@ import {
 } from 'recharts';
 
 const ZONAS_CENTROS = [
-  { nombre: 'Centro histórico', lat: -2.1894, lng: -79.8891 },
-  { nombre: 'Urdesa',           lat: -2.1550, lng: -79.9020 },
-  { nombre: 'Alborada',         lat: -2.1380, lng: -79.8950 },
-  { nombre: 'Sauces',           lat: -2.1200, lng: -79.9100 },
-  { nombre: 'Mapasingue',       lat: -2.1100, lng: -79.9050 },
-  { nombre: 'Guasmo Sur',       lat: -2.2300, lng: -79.8900 },
-  { nombre: 'Fertisa',          lat: -2.1650, lng: -79.9400 },
-  { nombre: 'Kennedy Norte',    lat: -2.1450, lng: -79.9150 },
-  { nombre: 'Centenario',       lat: -2.1750, lng: -79.8980 },
-  { nombre: 'Los Esteros',      lat: -2.1950, lng: -79.9100 },
-  { nombre: 'Chongón',          lat: -2.2100, lng: -79.9200 },
+  { nombre: 'Socio Vivienda',            lat: -2.12214, lng: -79.95721 },
+  { nombre: 'Monte Sinaí',               lat: -2.11542, lng: -79.97015 },
+  { nombre: 'El Guasmo Sur',             lat: -2.26182, lng: -79.89845 },
+  { nombre: 'Isla Trinitaria',           lat: -2.24251, lng: -79.91632 },
+  { nombre: 'Bastión Popular',           lat: -2.09115, lng: -79.93124 },
+  { nombre: 'Febres Cordero (Suburbio)', lat: -2.21453, lng: -79.93241 },
+  { nombre: 'Pascuales Centro',          lat: -2.05941, lng: -79.90422 },
+  { nombre: 'Cristo del Consuelo',       lat: -2.22635, lng: -79.91421 },
+  { nombre: 'Sauces (Etapas 1-9)',       lat: -2.13142, lng: -79.89215 },
+  { nombre: 'Alborada',                  lat: -2.14152, lng: -79.89942 },
+  { nombre: 'Mucho Lote 1',              lat: -2.07841, lng: -79.91232 },
+  { nombre: 'Puerto Santa Ana',          lat: -2.18025, lng: -79.87412 },
+  { nombre: 'Urdesa Central',            lat: -2.16782, lng: -79.90924 },
+  { nombre: 'Los Ceibos',                lat: -2.16853, lng: -79.93815 },
+  { nombre: 'Kennedy Norte',             lat: -2.15842, lng: -79.89124 },
+  { nombre: 'Barrio Centenario',         lat: -2.22741, lng: -79.89312 },
 ];
 
 function nombreZona(lat, lng) {
@@ -42,11 +48,12 @@ export default function AutoridadAnalitica({ secret }) {
           ...d,
           tendencia: d.tendencia.map(t => ({
             ...t,
-            fecha:   new Date(t.fecha).toLocaleDateString('es', { day: '2-digit', month: '2-digit' }),
-            total:   Number(t.total),
-            robos:   Number(t.robos),
-            asaltos: Number(t.asaltos),
-            gdo:     Number(t.gdo),
+            fecha:      new Date(t.fecha).toLocaleDateString('es', { day: '2-digit', month: '2-digit' }),
+            total:      Number(t.total),
+            robos:      Number(t.robos),
+            asaltos:    Number(t.asaltos),
+            homicidios: Number(t.homicidios),
+            gdo:        Number(t.gdo),
           })),
         });
       })

@@ -3,11 +3,15 @@ import { useState, useEffect } from 'react';
 import { Clock, MapPin, Trash2, CheckCircle } from 'lucide-react';
 
 const TIPO_COLORS = {
-  'Robo':       { bg:'#fff0f0', color:'#A32D2D' },
-  'Asalto':     { bg:'#faeeda', color:'#633806' },
-  'Punto GDO':  { bg:'#eeedfe', color:'#3C3489' },
-  'Vandalismo': { bg:'#e1f5ee', color:'#085041' },
-  'Otro':       { bg:'#f5f5f5', color:'#555'    },
+  'Robo a persona':       { bg:'#fff0f0', color:'#A32D2D' },
+  'Robo a domicilio':     { bg:'#fbe4d9', color:'#8a3a1c' },
+  'Robo a vehículo':      { bg:'#fdece0', color:'#b4552c' },
+  'Asalto a mano armada': { bg:'#faeeda', color:'#633806' },
+  'Homicidio':            { bg:'#f5dede', color:'#501313' },
+  'Extorsión':            { bg:'#fbeaf0', color:'#72243e' },
+  'Vandalismo':           { bg:'#e1f5ee', color:'#085041' },
+  'Punto GDO':            { bg:'#eeedfe', color:'#3C3489' },
+  'Otro':                 { bg:'#f5f5f5', color:'#555'    },
 };
 
 function timeAgo(dateStr) {

@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import AdminAnalytics from './AdminAnalytics';
 import AdminMetrics   from './AdminMetrics';
+import AutoridadAlertas from './AutoridadAlertas';
+
 
 const API = 'http://localhost:3001/api/admin';
 
