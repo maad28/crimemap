@@ -52,6 +52,7 @@ export default function MapView() {
   const clusterGroup  = useRef(null);
   const gridLayers    = useRef([]);
   const formMarker    = useRef(null);
+  const markersById   = useRef(new Map());
   const deviceId      = useDeviceId();
 
   const [reports,      setReports]      = useState([]);
@@ -208,6 +209,7 @@ useEffect(() => {
 const updateMarkers = (data) => {
   if (!clusterGroup.current) return;
   clusterGroup.current.clearLayers();
+  markersById.current.clear();
 
   const dataFiltrada = filtrosRef.current.soloConfiables
     ? data.filter(r => r.reputacion_puntos >= 130)
@@ -237,8 +239,16 @@ const updateMarkers = (data) => {
       <small>${r.confirmaciones} confirmaciones</small>
     `);
     clusterGroup.current.addLayer(marker);
+    markersById.current.set(r.id, marker);
   });
 };
+
+  // Hace zoom hasta que el marcador de ese reporte deje de estar agrupado en un cluster y abre su popup
+  const focusReport = (id) => {
+    const marker = markersById.current.get(id);
+    if (!marker || !clusterGroup.current) return;
+    clusterGroup.current.zoomToShowLayer(marker, () => marker.openPopup());
+  };
   const loadHeatmap = async (map) => {
   try {
     const { points } = await getHeatmap();
@@ -393,7 +403,8 @@ const updateMarkers = (data) => {
             </div>
             <div style={mStyles.bottomSheetContent}>
               {mobilePanel === 'lista' && (
-                <ReportList reports={reportsFiltrados} map={mapInstance.current}/>              )}
+                <ReportList reports={reportsFiltrados} map={mapInstance.current}
+                  onSelect={(id) => { setMobilePanel(null); focusReport(id); }}/>              )}
               {mobilePanel === 'menu' && (
                 <div style={mStyles.menuGrid}>
                   {[
@@ -592,7 +603,7 @@ const updateMarkers = (data) => {
     </div>
   )}
 </div>
-      <ReportList reports={reportsFiltrados} map={mapInstance.current}/>
+      <ReportList reports={reportsFiltrados} map={mapInstance.current} onSelect={focusReport}/>
       <PanicButton />
     </div>
   );

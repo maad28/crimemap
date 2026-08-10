@@ -22,7 +22,7 @@ function timeAgo(dateStr) {
   return `hace ${Math.floor(diff/86400)} d`;
 }
 
-export default function ReportList({ reports, map }) {
+export default function ReportList({ reports, map, onSelect }) {
   const [filter, setFilter] = useState('Todos');
 const tipos = ['Todos', 'Robo a persona', 'Robo a domicilio', 'Robo a vehículo',
                'Asalto a mano armada', 'Homicidio', 'Extorsión', 'Vandalismo', 'Punto GDO', 'Otro'];  const filtered = filter === 'Todos' ? reports : reports.filter(r => r.tipo === filter);
@@ -49,7 +49,7 @@ const tipos = ['Todos', 'Robo a persona', 'Robo a domicilio', 'Robo a vehículo'
           const esConfiable = r.reputacion_puntos >= 130;
           return (
             <div key={r.id} style={styles.card}
-                onClick={() => map?.setView([r.lat, r.lng], 16)}>
+                onClick={() => onSelect ? onSelect(r.id) : map?.setView([r.lat, r.lng], 16)}>
               <div style={styles.cardTop}>
                 <span style={{...styles.tipoBadge, background:tc.bg, color:tc.color}}>
                   {r.tipo}
