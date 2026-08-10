@@ -203,7 +203,7 @@ export default function AutoridadAnalitica({ secret }) {
 
       <div style={styles.row2}>
         {/* Por tipo */}
-        <div style={{ ...styles.section, flex: 1 }}>
+        <div style={{ ...styles.section, flex: 1, minWidth: 280 }}>
           <div style={styles.sectionTitle}>
             <BarChart2 size={15} strokeWidth={2} /> Denuncias por tipo
           </div>
@@ -219,7 +219,7 @@ export default function AutoridadAnalitica({ secret }) {
         </div>
 
         {/* Zonas */}
-        <div style={{ ...styles.section, flex: 1 }}>
+        <div style={{ ...styles.section, flex: 1, minWidth: 280 }}>
           <div style={styles.sectionTitle}>
             <Map size={15} strokeWidth={2} /> Zonas con más riesgo
           </div>
@@ -257,13 +257,13 @@ const styles = {
   exportGroup:  { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #eee', borderRadius: 20, padding: '4px 6px 4px 14px' },
   exportLabel:  { fontSize: 12, color: '#aaa', marginRight: 2 },
   exportBtn:    { display: 'flex', alignItems: 'center', gap: 6, background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 16, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
-  kpisRow:      { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 },
+  kpisRow:      { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 20 },
   kpiBox:       { borderRadius: 10, padding: 16, textAlign: 'center' },
   kpiNum:       { fontSize: 24, fontWeight: 700 },
   kpiLabel:     { fontSize: 11, color: '#888', marginTop: 4 },
   section:      { background: '#fff', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,.06)' },
   sectionTitle: { fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 },
-  row2:         { display: 'flex', gap: 16 },
+  row2:         { display: 'flex', gap: 16, flexWrap: 'wrap' },
   zonaList:     { display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 },
   zonaRow:      { display: 'flex', gap: 8, alignItems: 'center' },
   nivelBadge:   { display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 8, whiteSpace: 'nowrap' },

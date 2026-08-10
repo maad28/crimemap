@@ -132,7 +132,7 @@ const styles = {
   exportGroup:{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #eee', borderRadius: 20, padding: '4px 6px 4px 14px' },
   exportLabel:{ fontSize: 12, color: '#aaa', marginRight: 2 },
   exportBtn:  { display: 'flex', alignItems: 'center', gap: 6, background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 16, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
-  grid:       { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 },
+  grid:       { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 },
   card:       { background: '#fff', border: '1px solid #eee', borderRadius: 12, overflow: 'hidden' },
   cardTop:    { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },
   hash:       { fontSize: 11, fontFamily: 'monospace', color: '#666', flex: 1 },
