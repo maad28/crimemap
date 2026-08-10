@@ -156,6 +156,7 @@ def seed(n=5000):
     cur = conn.cursor()
 
     cur.execute("DELETE FROM reports")
+    cur.execute("DELETE FROM reputacion_dispositivo")
     conn.commit()
     print(f"Datos anteriores eliminados. Insertando {n} reportes...")
 
@@ -164,6 +165,7 @@ def seed(n=5000):
     conteo_por_tipo = {t: 0 for t in TIPOS}
     conteo_por_estado = {"aprobado": 0, "pendiente": 0, "rechazado": 0}
     conteo_por_rol = {"testigo": 0, "victima": 0, "sin_indicar": 0}
+    dispositivos = {}  # device_hash -> {aprobados, rechazados, totales, primera}
 
     for i in range(n):
         zona_idx = random.choices(range(len(ZONAS_URBANAS)), weights=PESOS)[0]
@@ -188,6 +190,15 @@ def seed(n=5000):
         conteo_por_estado[estado] += 1
         conteo_por_rol[rol or "sin_indicar"] += 1
 
+        d = dispositivos.setdefault(dev, {"aprobados": 0, "rechazados": 0, "totales": 0, "primera": ts})
+        d["totales"] += 1
+        if estado == "aprobado":
+            d["aprobados"] += 1
+        elif estado == "rechazado":
+            d["rechazados"] += 1
+        if ts < d["primera"]:
+            d["primera"] = ts
+
         cur.execute(
             """INSERT INTO reports (tipo, severidad, ubicacion, device_hash, confirmaciones, created_at, estado, rol_reportante)
                VALUES (%s, %s, ST_MakePoint(%s,%s)::geography, %s, %s, %s, %s, %s)""",
@@ -198,6 +209,24 @@ def seed(n=5000):
             conn.commit()
 
     conn.commit()
+
+    # Reputación por dispositivo — misma fórmula que reputacion.js (100 base, +5/aprobado, -15/rechazado)
+    print(f"Insertando reputación de {len(dispositivos)} dispositivos...")
+    confiables = 0
+    for dev, d in dispositivos.items():
+        puntos = max(0, 100 + 5 * d["aprobados"] - 15 * d["rechazados"])
+        bloqueado = puntos < 30
+        if puntos >= 130:
+            confiables += 1
+        cur.execute(
+            """INSERT INTO reputacion_dispositivo
+               (device_hash, puntos, reportes_totales, reportes_aprobados, reportes_rechazados, bloqueado, primera_actividad)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (device_hash) DO NOTHING""",
+            (dev, puntos, d["totales"], d["aprobados"], d["rechazados"], bloqueado, d["primera"])
+        )
+    conn.commit()
+
     cur.close()
     conn.close()
     print("✅ Seed completo")
@@ -206,6 +235,7 @@ def seed(n=5000):
     print(f"   Distribución por tipo: {conteo_por_tipo}")
     print(f"   Distribución por estado: {conteo_por_estado}")
     print(f"   Distribución por rol: {conteo_por_rol}")
+    print(f"   Dispositivos confiables (≥130 pts): {confiables}/{len(dispositivos)}")
 
 
 if __name__ == "__main__":
