@@ -238,7 +238,7 @@ const descargarPDF = async () => {
     </div>
   </div>
 
-  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
     <div style={styles.vistaToggle}>
       <button onClick={() => setVista('cards')} title="Vista de tarjetas"
         style={{ ...styles.vistaBtn, ...(vista === 'cards' ? styles.vistaBtnActive : {}) }}>
@@ -440,7 +440,7 @@ const styles = {
   filtersRow:      { display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' },
   select:          { padding: '6px 10px', borderRadius: 8, border: '1px solid #eee', fontSize: 13, background: '#fff' },
   sevFilter:       { display: 'flex', alignItems: 'center', gap: 8 },
-  grid:            { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 },
+  grid:            { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 },
   card:            { background: '#fff', border: '1px solid #eee', borderRadius: 12, overflow: 'hidden' },
   timeLabel:       { fontSize: 11, color: '#aaa', display: 'flex', alignItems: 'center', gap: 3 },
   desc:            { fontSize: 12, color: '#555', margin: '4px 0' },

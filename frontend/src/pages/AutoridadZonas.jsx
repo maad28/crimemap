@@ -122,7 +122,7 @@ export default function AutoridadZonas({ secret }) {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={orden} onChange={e => setOrden(e.target.value)} style={styles.select}>
             <option value="total_desc">Más denuncias</option>
             <option value="total_asc">Menos denuncias</option>
@@ -305,7 +305,7 @@ const styles = {
   td:           { padding: '9px 12px', borderBottom: '1px solid #f5f5f5', color: '#333', whiteSpace: 'nowrap' },
   mapBtnSmall:  { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, background: '#f0f7ff', border: '1px solid #cce0ff', borderRadius: 6, color: '#0C447C', cursor: 'pointer' },
   actionBtnSmall: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' },
-  grid:         { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 },
+  grid:         { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 },
   card:         { background: '#fff', border: '1px solid #eee', borderRadius: 12, overflow: 'hidden' },
   tipoBadge:    { fontSize: 12, fontWeight: 700, background: '#eeedfe', color: '#534AB7', padding: '3px 10px', borderRadius: 8 },
   totalBadge:   { fontSize: 12, fontWeight: 700, color: '#333', display: 'flex', alignItems: 'center', gap: 4 },
