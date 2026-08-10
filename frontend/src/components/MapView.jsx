@@ -254,6 +254,12 @@ const updateMarkers = (data) => {
     const { points } = await getHeatmap();
     if (!points.length) return;
     await import('leaflet.heat');
+    // El contenedor puede seguir sin tamaño real justo después de crearse el mapa
+    // (sobre todo la primera carga); sin esto, leaflet.heat dibuja sobre un canvas
+    // de ancho 0 y lanza un IndexSizeError que no queda atrapado por este try/catch
+    // porque ocurre dentro de un callback interno de Leaflet, no en esta función.
+    map.invalidateSize();
+    if (map.getSize().x === 0 || map.getSize().y === 0) return;
     if (heatLayer.current) heatLayer.current.remove();
     heatLayer.current = L.heatLayer(points,{
       radius: 45,
