@@ -1,6 +1,9 @@
 import random, hashlib, os
 from datetime import datetime, timedelta
 import psycopg2
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TIPOS = [
     "Robo a persona",
@@ -143,10 +146,12 @@ def gen_rol():
 
 
 def seed(n=5000):
-    user = os.getenv("DB_USER") or os.popen("whoami").read().strip()
     conn = psycopg2.connect(
-        host="localhost", port=5432,
-        dbname="crimemap", user=user, password=""
+        host=os.getenv("DB_HOST", "localhost"),
+        port=os.getenv("DB_PORT", 5432),
+        dbname=os.getenv("DB_NAME", "crimemap"),
+        user=os.getenv("DB_USER") or os.popen("whoami").read().strip(),
+        password=os.getenv("DB_PASSWORD", ""),
     )
     cur = conn.cursor()
 
