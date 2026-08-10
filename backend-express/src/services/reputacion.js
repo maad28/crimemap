@@ -135,12 +135,29 @@ async function detectarDispositivoNuevoSospechoso(device_hash) {
       motivo: 'dispositivo_nuevo_actividad_alta',
       minutos_desde_creacion: Math.round(minutosDesdeCreacion),
       confirmaciones_recibidas: Number(confirmaciones_recibidas),
-      device_hash_parcial: device_hash.slice(0, 16), // parcial, no el hash completo
+      // Hash completo para permitir bloquear el dispositivo desde la alerta;
+      // la UI solo muestra un prefijo truncado (igual que en el panel de Reputación).
+      device_hash,
     };
     await registrarAlerta('dispositivo_nuevo_actividad_alta', alerta);
     return alerta;
   }
   return { sospechoso: false };
+}
+
+async function bloquearManualmente(device_hash) {
+  await asegurarRegistro(device_hash);
+  await pool.query(`
+    UPDATE reputacion_dispositivo SET bloqueado = true, updated_at = NOW()
+    WHERE device_hash = $1
+  `, [device_hash]);
+}
+
+async function desbloquearManualmente(device_hash) {
+  await pool.query(`
+    UPDATE reputacion_dispositivo SET bloqueado = false, updated_at = NOW()
+    WHERE device_hash = $1
+  `, [device_hash]);
 }
 
 module.exports = {
@@ -151,4 +168,6 @@ module.exports = {
   excedeLimiteFrecuencia,
   detectarRafaga,
   detectarDispositivoNuevoSospechoso,
+  bloquearManualmente,
+  desbloquearManualmente,
 };

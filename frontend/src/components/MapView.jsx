@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp } from 'lucide-react';import ReportForm      from './ReportForm';
+import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown } from 'lucide-react';import ReportForm      from './ReportForm';
 import ReportList      from './ReportList';
 import ConfirmToast    from './ConfirmToast';
 import PredictPanel    from './PredictPanel';
@@ -21,6 +21,7 @@ import PoliceMarkers from './PoliceMarkers';
 import SafeRoutePanel from './SafeRoutePanel';
 import { Link } from 'react-router-dom';
 import AnalyticsDashboard from '../pages/AnalyticsDashboard';
+import ReportesExport from '../pages/ReportesExport';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -240,14 +241,17 @@ const updateMarkers = (data) => {
       radius: 45,
       blur: 35,
       maxZoom: 17,
-      max: 12.5,
-      minOpacity: 0.35,
+      max: 5, // techo real de peso: severidad(5), sin confirmaciones — ver heatmap.py
+      minOpacity: 0.05, // antes 0.35 — forzaba a que hasta el borde sin señal real se viera pintado
       gradient: {
-        0.2: '#1D9E75',
-        0.4: '#5DCAA5',
-        0.6: '#EF9F27',
-        0.8: '#BA7517',
-        1.0: '#E24B4A',
+        // Sin verde: el verde se leía como "zona segura" cuando en realidad solo
+        // era "casi sin acumulación de calor" (el borde difuso de cualquier punto).
+        // Ahora las zonas sin señal real quedan transparentes, no coloreadas.
+        0:    'rgba(239,159,39,0)', // transparente en la base
+        0.35: '#F4C542', // amarillo — recién empieza a haber señal real
+        0.6:  '#EF9F27', // naranja
+        0.8:  '#BA7517', // naranja oscuro
+        1.0:  '#E24B4A', // rojo
       },
     }).addTo(map);
   } catch(e) { console.error(e); }
@@ -277,7 +281,7 @@ const updateMarkers = (data) => {
       const rect = L.rectangle(
         [[z.lat-0.004,z.lng-0.004],[z.lat+0.004,z.lng+0.004]],
         { color:z.color, fillColor:z.color, fillOpacity:opacity, weight:0 }
-      ).bindPopup(`<b>Predicción</b><br>Nivel: <b style="color:${z.color}">${z.nivel_riesgo}</b><br>Eventos: ${z.robos_estimados}`)
+      ).bindPopup(`<b>Predicción</b><br>Nivel: <b style="color:${z.color}">${z.nivel_riesgo}</b><br>Riesgo estimado: ${z.riesgo_estimado}`)
        .addTo(mapInstance.current);
       gridLayers.current.push(rect);
     });
@@ -313,6 +317,7 @@ const updateMarkers = (data) => {
     if (activeTab==='prediccion') return <PredictPanel map={mapInstance.current} onGridData={handleGridData}/>;
     if (activeTab==='historial')  return <HistorialPanel map={mapInstance.current}/>;
     if (activeTab==='ruta')       return <SafeRoutePanel map={mapInstance.current}/>;
+    if (activeTab==='reportes-export') return <ReportesExport/>;
 
     return null;
   };
@@ -387,6 +392,7 @@ const updateMarkers = (data) => {
                     { id:'historial',  label:'Historial',  Icon:History    },
                     { id:'ruta',       label:'Ruta segura',  Icon:Route     }, // ← agregar esta línea
                     { id:'analitica-avanzada',label:'Analítica avanzada', Icon:TrendingUp },
+                    { id:'reportes-export',label:'Reportes', Icon:FileDown },
 
                   ].map(({ id, label, Icon }) => (
                     <div key={id} style={mStyles.menuItem}
@@ -497,18 +503,26 @@ const updateMarkers = (data) => {
             </div>
           ))}
         </nav>
-        {activeTab !== 'mapa' && activeTab !== 'analitica-avanzada' && (
+        {activeTab !== 'mapa' && activeTab !== 'analitica-avanzada' && activeTab !== 'reportes-export' && (
           <div style={styles.panelWrapper}>{renderLeftPanel()}</div>
         )}
-        <div style={styles.mapInfo}>
-          <div style={styles.mapInfoLabel}>Denuncias visibles</div>
-          <div style={styles.mapInfoCount}>{reports.length}</div>
+        <div style={styles.sidebarBottom}>
+          <div
+            style={{...styles.reportesBtn, ...(activeTab==='reportes-export' ? styles.reportesBtnActive : {})}}
+            onClick={() => setActiveTab('reportes-export')}>
+            <FileDown size={15} strokeWidth={1.8}/>
+            <span>Reportes</span>
+          </div>
+          <div style={styles.mapInfo}>
+            <div style={styles.mapInfoLabel}>Denuncias visibles</div>
+            <div style={styles.mapInfoCount}>{reports.length}</div>
+          </div>
         </div>
       </aside>
       <div style={{ flex:1, position:'relative' }}>
 
   {/* El mapa y sus overlays SIEMPRE están montados, solo se ocultan con CSS */}
-  <div style={{ display: activeTab === 'analitica-avanzada' ? 'none' : 'block', width:'100%', height:'100%', position:'relative' }}>
+  <div style={{ display: (activeTab === 'analitica-avanzada' || activeTab === 'reportes-export') ? 'none' : 'block', width:'100%', height:'100%', position:'relative' }}>
     <div ref={mapRef} style={{ width:'100%', height:'100%' }}/>
     <PoliceMarkers map={mapInstance.current} />
 
@@ -562,6 +576,11 @@ const updateMarkers = (data) => {
       <AnalyticsDashboard />
     </div>
   )}
+  {activeTab === 'reportes-export' && (
+    <div style={{ position:'absolute', inset:0, background:'#fff', overflowY:'auto' }}>
+      <ReportesExport />
+    </div>
+  )}
 </div>
       <ReportList reports={reportsFiltrados} map={mapInstance.current}/>
       <PanicButton />
@@ -610,6 +629,9 @@ const styles = {
   navItemActive: { background:'#fff0f0', color:'#E24B4A', fontWeight:500 },
   activeDot:     { width:'6px', height:'6px', borderRadius:'50%', background:'#E24B4A', marginLeft:'auto' },
   panelWrapper:  { flex:1, overflowY:'auto', borderTop:'1px solid #eee' },
+  sidebarBottom: { marginTop:'auto', flexShrink:0 },
+  reportesBtn:   { display:'flex', alignItems:'center', gap:'8px', margin:'0 8px', padding:'9px 10px', borderRadius:'8px', cursor:'pointer', fontSize:'13px', color:'#666', borderTop:'1px solid #eee' },
+  reportesBtnActive: { background:'#fff0f0', color:'#E24B4A', fontWeight:500 },
   mapInfo:       { padding:'12px 16px', borderTop:'1px solid #eee', flexShrink:0 },
   mapInfoLabel:  { fontSize:'11px', color:'#aaa' },
   mapInfoCount:  { fontSize:'28px', fontWeight:700, color:'#E24B4A' },

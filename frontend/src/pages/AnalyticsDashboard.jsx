@@ -1,9 +1,9 @@
 //frontend/src/pages/AnalyticsDashboard.jsx
 import { useState, useEffect } from 'react';
-import { BarChart2, TrendingUp, Clock, Calendar, Filter } from 'lucide-react';
+import { BarChart2, TrendingUp, TrendingDown, Clock, Calendar, Filter } from 'lucide-react';
 
-const API_EXPRESS = 'http://localhost:3001';
-const API_FASTAPI = 'http://localhost:8000';
+const API_EXPRESS = import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001';
+const API_FASTAPI = import.meta.env.VITE_API_FASTAPI || 'http://localhost:8000';
 
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -49,6 +49,7 @@ export default function AnalyticsDashboard() {
   const [prediccion, setPrediccion] = useState(null);
   const [loadingPred, setLoadingPred] = useState(false);
   const [tiposZona, setTiposZona] = useState(null);
+  const [tendenciaZona, setTendenciaZona] = useState(null);
 
 
   useEffect(() => {
@@ -71,6 +72,11 @@ export default function AnalyticsDashboard() {
     .then(r => r.json())
     .then(setTiposZona);
 };
+  const cargarTendenciaZona = () => {
+  fetch(`${API_EXPRESS}/api/reports/tendencia-zona?lat=${zona.lat}&lng=${zona.lng}&meses=3`)
+    .then(r => r.json())
+    .then(setTendenciaZona);
+};
 
   const maxHora = historico ? Math.max(...historico.por_hora.map(h => h.total), 1) : 1;
   const maxDia  = historico ? Math.max(...historico.por_dia_semana.map(d => d.total), 1) : 1;
@@ -78,6 +84,7 @@ export default function AnalyticsDashboard() {
   const diaPico  = historico ? historico.por_dia_semana.reduce((a, b) => b.total > a.total ? b : a) : null;
 useEffect(() => {
   cargarTiposZona();
+  cargarTendenciaZona();
 }, [zona]);
   return (
     <div style={styles.page}>
@@ -151,12 +158,33 @@ useEffect(() => {
               <span style={styles.predHoraDestacada}> {prediccion.hora_mayor_riesgo}:00</span>
             </div>
             {prediccion.por_hora.map(h => (
-              <Barra key={h.hora} label={`${h.hora}:00`} valor={h.robos_estimados}
-                     max={Math.max(...prediccion.por_hora.map(x => x.robos_estimados), 1)} color="#BA7517"/>
+              <Barra key={h.hora} label={`${h.hora}:00`} valor={h.riesgo_estimado}
+                     max={Math.max(...prediccion.por_hora.map(x => x.riesgo_estimado), 1)} color="#BA7517"/>
             ))}
           </>
         )}
       </div>
+      <div style={styles.section}>
+        <div style={styles.sectionTitle}><TrendingUp size={14}/> Tendencia en {zona.nombre} (últimos 3 meses)</div>
+        {tendenciaZona && tendenciaZona.variacion_pct !== null ? (
+          <>
+            <div style={{
+              ...styles.tendenciaBadge,
+              background: tendenciaZona.variacion_pct > 0 ? '#faeaea' : '#e1f5ee',
+              color:      tendenciaZona.variacion_pct > 0 ? '#E24B4A' : '#1D9E75',
+            }}>
+              {tendenciaZona.variacion_pct > 0 ? <TrendingUp size={16}/> : <TrendingDown size={16}/>}
+              {tendenciaZona.variacion_pct > 0 ? '+' : ''}{tendenciaZona.variacion_pct}%
+            </div>
+            <p style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
+              {tendenciaZona.actual} denuncias en los últimos 3 meses, frente a {tendenciaZona.anterior} en los 3 meses anteriores.
+            </p>
+          </>
+        ) : (
+          <p style={{ color: '#aaa', fontSize: 12 }}>Sin datos suficientes del período anterior para comparar.</p>
+        )}
+      </div>
+
       <div style={styles.section}>
         <div style={styles.sectionTitle}><BarChart2 size={14}/> Tipos de incidente más frecuentes en {zona.nombre}</div>
         {tiposZona && tiposZona.tipos.length > 0 ? (
@@ -198,4 +226,5 @@ const styles = {
   btn:            { background: '#534AB7', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   predResumen:    { fontSize: 13, color: '#555', marginBottom: 14, background: '#faeeda', padding: '10px 14px', borderRadius: 8 },
   predHoraDestacada: { fontWeight: 700, color: '#633806' },
+  tendenciaBadge: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 18, fontWeight: 700, padding: '8px 16px', borderRadius: 10 },
 };

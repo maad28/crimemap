@@ -201,7 +201,7 @@ const resZonas = await fetch(`${API}/api/reports/zonas-para-ruta`); // antes: zo
 }
 
 const styles = {
-  panel:          { background: '#fff', borderRadius: 12, padding: 14, boxShadow: '0 2px 10px rgba(0,0,0,.1)', width: 240 },
+  panel:          { background: '#fff', borderRadius: 12, padding: 14, boxShadow: '0 2px 10px rgba(0,0,0,.1)', width: '100%', boxSizing: 'border-box' },
   title:          { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, marginBottom: 10 },
   input:          { width: '100%', border: '1px solid #eee', borderRadius: 8, padding: '8px 10px', fontSize: 12, marginBottom: 8, boxSizing: 'border-box' },
   sugerencias:    { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #eee', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.12)', zIndex: 10, maxHeight: 160, overflowY: 'auto', marginTop: 2 },

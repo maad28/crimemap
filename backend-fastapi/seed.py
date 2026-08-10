@@ -48,8 +48,11 @@ SEVERIDAD_POR_NIVEL = {
     "baja":  [1, 1, 2, 2, 2, 3],
 }
 
+# Debe coincidir con SEVERIDAD_MINIMA_POR_TIPO en backend-express/src/routes/reports.js —
+# si se desincroniza, el seed puede generar reportes que la app real nunca dejaría crear.
 SEVERIDAD_MINIMA_POR_TIPO = {
-    "Homicidio": 4,
+    "Homicidio": 5,
+    "Extorsión": 4,
     "Asalto a mano armada": 3,
 }
 
@@ -118,6 +121,27 @@ def fake_device():
     return hashlib.sha256(str(random.randint(1, 800)).encode()).hexdigest()
 
 
+def gen_estado(ts):
+    """
+    Reportes muy recientes probablemente la Autoridad todavía no los revisó
+    (backlog de moderación realista). Los más viejos ya deberían estar resueltos:
+    70% aprobado, 20% pendiente, 10% rechazado.
+    """
+    dias_desde_creacion = (datetime.now() - ts).days
+    if dias_desde_creacion < 2:
+        return random.choices(
+            ["pendiente", "aprobado", "rechazado"], weights=[0.85, 0.12, 0.03]
+        )[0]
+    return random.choices(
+        ["aprobado", "pendiente", "rechazado"], weights=[0.70, 0.20, 0.10]
+    )[0]
+
+
+def gen_rol():
+    """Rol opcional del reportante — no todos lo indican."""
+    return random.choices([None, "testigo", "victima"], weights=[0.40, 0.35, 0.25])[0]
+
+
 def seed(n=5000):
     user = os.getenv("DB_USER") or os.popen("whoami").read().strip()
     conn = psycopg2.connect(
@@ -133,6 +157,8 @@ def seed(n=5000):
     conteo_por_zona = {z[0]: 0 for z in ZONAS_URBANAS}
     conteo_por_nivel = {"alta": 0, "media": 0, "baja": 0}
     conteo_por_tipo = {t: 0 for t in TIPOS}
+    conteo_por_estado = {"aprobado": 0, "pendiente": 0, "rechazado": 0}
+    conteo_por_rol = {"testigo": 0, "victima": 0, "sin_indicar": 0}
 
     for i in range(n):
         zona_idx = random.choices(range(len(ZONAS_URBANAS)), weights=PESOS)[0]
@@ -143,20 +169,24 @@ def seed(n=5000):
         lat = min(max(lat, LAT_MIN), LAT_MAX)
         lng = min(max(lng, LNG_MIN), LNG_MAX)
 
-        ts   = gen_timestamp()
-        tipo = gen_tipo(nivel)
-        sev  = gen_severidad(nivel, tipo)
-        conf = gen_confirmaciones(nivel)
-        dev  = fake_device()
+        ts     = gen_timestamp()
+        tipo   = gen_tipo(nivel)
+        sev    = gen_severidad(nivel, tipo)
+        conf   = gen_confirmaciones(nivel)
+        dev    = fake_device()
+        estado = gen_estado(ts)
+        rol    = gen_rol()
 
         conteo_por_zona[nombre] += 1
         conteo_por_nivel[nivel] += 1
         conteo_por_tipo[tipo] += 1
+        conteo_por_estado[estado] += 1
+        conteo_por_rol[rol or "sin_indicar"] += 1
 
         cur.execute(
-            """INSERT INTO reports (tipo, severidad, ubicacion, device_hash, confirmaciones, created_at)
-               VALUES (%s, %s, ST_MakePoint(%s,%s)::geography, %s, %s, %s)""",
-            (tipo, sev, lng, lat, dev, conf, ts)
+            """INSERT INTO reports (tipo, severidad, ubicacion, device_hash, confirmaciones, created_at, estado, rol_reportante)
+               VALUES (%s, %s, ST_MakePoint(%s,%s)::geography, %s, %s, %s, %s, %s)""",
+            (tipo, sev, lng, lat, dev, conf, ts, estado, rol)
         )
         if i % 500 == 0:
             print(f"  {i}/{n}...")
@@ -169,6 +199,8 @@ def seed(n=5000):
     print(f"   Distribución por zona: {conteo_por_zona}")
     print(f"   Distribución por nivel: {conteo_por_nivel}")
     print(f"   Distribución por tipo: {conteo_por_tipo}")
+    print(f"   Distribución por estado: {conteo_por_estado}")
+    print(f"   Distribución por rol: {conteo_por_rol}")
 
 
 if __name__ == "__main__":

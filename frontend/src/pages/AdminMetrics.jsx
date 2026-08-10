@@ -7,7 +7,7 @@ import {
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 
-const FASTAPI = 'http://localhost:8000';
+const FASTAPI = import.meta.env.VITE_API_FASTAPI || 'http://localhost:8000';
 
 const MODELO_INFO = {
   xgboost:       { nombre:'XGBoost',       color:'#534AB7' },

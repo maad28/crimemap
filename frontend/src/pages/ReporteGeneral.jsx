@@ -4,7 +4,8 @@ import { FileDown, FileText } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const API = 'http://localhost:3001/api/admin';
+const API_BASE = import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001';
+const API = `${API_BASE}/api/admin`;
 
 export default function ReporteGeneral({ secret, rol }) {
   // rol = 'admin' o 'autoridad'
@@ -12,7 +13,7 @@ export default function ReporteGeneral({ secret, rol }) {
   const headers = { [headerName]: secret };
 
   useEffect(() => {
-    fetch(`http://localhost:3001/api/reporte-general`, { headers })
+    fetch(`${API_BASE}/api/reporte-general`, { headers })
       .then(r => r.json())
       .then(setData)
       .finally(() => setLoading(false));

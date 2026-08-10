@@ -1,6 +1,6 @@
 //Users/mac/crimemap/frontend/src/components/ReportForm.jsx
 import { useState, useRef, useEffect } from 'react';
-import { X, MapPin, Send, Navigation, Search } from 'lucide-react';
+import { X, MapPin, Send, Navigation, Search, Eye, UserX2 } from 'lucide-react';
 import { createReport } from '../api/reports';
 
 const TIPOS = [
@@ -14,6 +14,13 @@ const TIPOS = [
   'Punto GDO',
   'Otro',
 ];
+
+// Piso mínimo de severidad para los tipos más graves — coincide con el que aplica el backend.
+const SEVERIDAD_MINIMA_POR_TIPO = {
+  'Homicidio': 5,
+  'Extorsión': 4,
+  'Asalto a mano armada': 3,
+};
 function guardarEnHistorial(reporte) {
   const saved = localStorage.getItem('crimemap_historial');
   const hist  = saved ? JSON.parse(saved) : [];
@@ -25,6 +32,7 @@ export default function ReportForm({ lat, lng, deviceId, onCreated, onClose, onM
   const [tipo,        setTipo]        = useState('Robo a persona');
   const [desc,        setDesc]        = useState('');
   const [sev,         setSev]         = useState(3);
+  const [rol,         setRol]         = useState(null); // 'testigo' | 'victima' | null
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
   const [locating,    setLocating]    = useState(false);
@@ -87,6 +95,14 @@ const res  = await fetch(`${API}/api/geocode/place?place_id=${prediction.place_i
     );
   };
 
+  const sevMinimo = SEVERIDAD_MINIMA_POR_TIPO[tipo] || 1;
+
+  const selectTipo = (t) => {
+    setTipo(t);
+    const minimo = SEVERIDAD_MINIMA_POR_TIPO[t] || 1;
+    if (sev < minimo) setSev(minimo);
+  };
+
   const submit = async () => {
     if (!deviceId) return;
     try {
@@ -94,7 +110,7 @@ const res  = await fetch(`${API}/api/geocode/place?place_id=${prediction.place_i
       const res = await createReport({
         tipo, descripcion: desc,
         lat: currentLat, lng: currentLng,
-        severidad: sev, device_id: deviceId
+        severidad: sev, device_id: deviceId, rol,
       });
       guardarEnHistorial({
         id: res.id, tipo, descripcion: desc,
@@ -188,7 +204,7 @@ const res  = await fetch(`${API}/api/geocode/place?place_id=${prediction.place_i
         {TIPOS.map(t => (
           <button key={t}
             style={{...styles.tipoBtn,...(tipo===t?styles.tipoBtnSel:{})}}
-            onClick={() => setTipo(t)}>{t}</button>
+            onClick={() => selectTipo(t)}>{t}</button>
         ))}
       </div>
 
@@ -200,14 +216,39 @@ const res  = await fetch(`${API}/api/geocode/place?place_id=${prediction.place_i
         rows={3}
       />
 
+      {/* Rol del reportante — solo informativo, ayuda a la Autoridad a evaluar el contexto */}
+      <div style={styles.rolRow}>
+        <span style={styles.sevLabel}>¿Lo viste o te pasó a ti? (opcional)</span>
+        <div style={{ display:'flex', gap:6 }}>
+          <button
+            style={{...styles.rolBtn,...(rol==='testigo'?styles.rolBtnSel:{})}}
+            onClick={() => setRol(rol === 'testigo' ? null : 'testigo')}>
+            <Eye size={12} strokeWidth={2}/> Fui testigo
+          </button>
+          <button
+            style={{...styles.rolBtn,...(rol==='victima'?styles.rolBtnSel:{})}}
+            onClick={() => setRol(rol === 'victima' ? null : 'victima')}>
+            <UserX2 size={12} strokeWidth={2}/> Me pasó a mí
+          </button>
+        </div>
+      </div>
+
       <div style={styles.sevRow}>
         <span style={styles.sevLabel}>Severidad:</span>
-        {[1,2,3,4,5].map(n => (
-          <button key={n}
-            style={{...styles.sevBtn,...(sev===n?styles.sevBtnSel:{})}}
-            onClick={() => setSev(n)}>{n}</button>
-        ))}
+        {[1,2,3,4,5].map(n => {
+          const disabled = n < sevMinimo;
+          return (
+            <button key={n}
+              style={{...styles.sevBtn,...(sev===n?styles.sevBtnSel:{}),...(disabled?styles.sevBtnDisabled:{})}}
+              disabled={disabled}
+              title={disabled ? `Este tipo de incidente requiere severidad mínima ${sevMinimo}` : undefined}
+              onClick={() => setSev(n)}>{n}</button>
+          );
+        })}
       </div>
+      {sevMinimo > 1 && (
+        <div style={styles.sevHint}>Este tipo de incidente requiere severidad mínima {sevMinimo}.</div>
+      )}
 
       {error && <div style={styles.error}>{error}</div>}
 
@@ -240,10 +281,15 @@ const styles = {
 tipoGrid: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', marginBottom:'10px' },  tipoBtn:            { padding:'6px 4px', border:'1px solid #eee', borderRadius:'8px', fontSize:'11px', cursor:'pointer', background:'#fafafa', color:'#555' },
   tipoBtnSel:         { background:'#fff0f0', borderColor:'#E24B4A', color:'#E24B4A', fontWeight:600 },
   textarea:           { width:'100%', border:'1px solid #eee', borderRadius:'8px', padding:'6px 8px', fontSize:'12px', resize:'none', fontFamily:'inherit', marginBottom:'8px', boxSizing:'border-box' },
-  sevRow:             { display:'flex', alignItems:'center', gap:'4px', marginBottom:'10px' },
+  rolRow:             { marginBottom:'10px' },
+  rolBtn:             { flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:'5px', padding:'6px 4px', border:'1px solid #eee', borderRadius:'8px', fontSize:'11px', cursor:'pointer', background:'#fafafa', color:'#555', marginTop:'4px' },
+  rolBtnSel:          { background:'#fff0f0', borderColor:'#E24B4A', color:'#E24B4A', fontWeight:600 },
+  sevRow:             { display:'flex', alignItems:'center', gap:'4px', marginBottom:'4px' },
   sevLabel:           { fontSize:'11px', color:'#888' },
   sevBtn:             { width:'24px', height:'24px', borderRadius:'50%', border:'1px solid #eee', background:'#fafafa', fontSize:'11px', cursor:'pointer' },
   sevBtnSel:          { background:'#E24B4A', color:'#fff', border:'1px solid #E24B4A' },
+  sevBtnDisabled:     { opacity:.35, cursor:'not-allowed' },
+  sevHint:            { fontSize:'10px', color:'#BA7517', marginBottom:'10px' },
   error:              { fontSize:'11px', color:'#E24B4A', marginBottom:'8px' },
   submitBtn:          { width:'100%', padding:'9px', background:'#E24B4A', border:'none', borderRadius:'8px', color:'#fff', fontWeight:600, fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' },
 };

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, X, MessageCircle, Send } from 'lucide-react';
 
-const API = 'http://localhost:3001/api/reports';
+const API = `${import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001'}/api/reports`;
 
 function minutosDesde(fecha) {
   return Math.round((Date.now() - new Date(fecha).getTime()) / 60000);

@@ -1,8 +1,10 @@
 //frontend/src/pages/AutoridadReputacion.jsx
 import { useState, useEffect } from 'react';
-import { ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, FileDown, FileText } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
-const API = 'http://localhost:3001/api/authority';
+const API = `${import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001'}/api/authority`;
 
 export default function AutoridadReputacion({ secret }) {
   const [dispositivos, setDispositivos] = useState([]);
@@ -24,18 +26,74 @@ export default function AutoridadReputacion({ secret }) {
 
   useEffect(() => { cargar(); }, [soloBloqueados]);
 
+  const descargarCSV = () => {
+    if (!dispositivos.length) return;
+    let csv = `CrimeMap GYE — Reputación de dispositivos\n`;
+    csv += `Generado: ${new Date().toLocaleString('es-EC')}\n\n`;
+    csv += 'Device hash,Puntos,Reportes totales,Aprobados,Rechazados,Bloqueado,Primera actividad\n';
+    dispositivos.forEach(d => {
+      csv += `${d.device_hash},${d.puntos},${d.reportes_totales},${d.reportes_aprobados},${d.reportes_rechazados},${d.bloqueado},${d.primera_actividad}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `crimemap_reputacion_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const descargarPDF = () => {
+    if (!dispositivos.length) return;
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text('CrimeMap GYE — Reputación de dispositivos', 14, 18);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120);
+    doc.text(`Generado: ${new Date().toLocaleString('es-EC')}`, 14, 24);
+    doc.setTextColor(0);
+
+    autoTable(doc, {
+      startY: 30,
+      head: [['Device hash', 'Puntos', 'Totales', 'Aprob.', 'Rechaz.', 'Bloqueado']],
+      body: dispositivos.map(d => [
+        `${d.device_hash.slice(0, 16)}...`, d.puntos, d.reportes_totales,
+        d.reportes_aprobados, d.reportes_rechazados, d.bloqueado ? 'Sí' : 'No',
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [26, 26, 26] },
+      styles: { fontSize: 8 },
+      margin: { left: 14, right: 14 },
+    });
+    doc.save(`crimemap_reputacion_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <div>
       <h2 style={{ margin: '0 0 16px' }}>Reputación de dispositivos</h2>
 
-      <label style={styles.checkLabel}>
-        <input
-          type="checkbox"
-          checked={soloBloqueados}
-          onChange={e => setSoloBloqueados(e.target.checked)}
-        />
-        Solo bloqueados
-      </label>
+      <div style={styles.toolbarRow}>
+        <label style={styles.checkLabel}>
+          <input
+            type="checkbox"
+            checked={soloBloqueados}
+            onChange={e => setSoloBloqueados(e.target.checked)}
+          />
+          Solo bloqueados
+        </label>
+
+        <div style={styles.exportGroup}>
+          <span style={styles.exportLabel}>Exportar</span>
+          <button onClick={descargarCSV} disabled={!dispositivos.length} style={styles.exportBtn}>
+            <FileDown size={14}/> CSV
+          </button>
+          <button onClick={descargarPDF} disabled={!dispositivos.length} style={styles.exportBtn}>
+            <FileText size={14}/> PDF
+          </button>
+        </div>
+      </div>
 
       {loading && <p>Cargando...</p>}
       {!loading && dispositivos.length === 0 && (
@@ -69,7 +127,11 @@ export default function AutoridadReputacion({ secret }) {
 }
 
 const styles = {
-  checkLabel: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#666', cursor: 'pointer', marginBottom: 16 },
+  toolbarRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
+  checkLabel: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#666', cursor: 'pointer' },
+  exportGroup:{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #eee', borderRadius: 20, padding: '4px 6px 4px 14px' },
+  exportLabel:{ fontSize: 12, color: '#aaa', marginRight: 2 },
+  exportBtn:  { display: 'flex', alignItems: 'center', gap: 6, background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 16, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
   grid:       { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 },
   card:       { background: '#fff', border: '1px solid #eee', borderRadius: 12, overflow: 'hidden' },
   cardTop:    { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },

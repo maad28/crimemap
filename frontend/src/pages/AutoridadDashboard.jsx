@@ -23,7 +23,7 @@ export default function AutoridadDashboard({ secret, onLogout }) {
           <div style={{ ...styles.navItem, ...(activeTab === 'reportes' ? styles.navItemActive : {}) }}
             onClick={() => setActiveTab('reportes')}>
             <FileText size={16} strokeWidth={1.8} />
-            <span>Reportes</span>
+            <span>Incidentes</span>
           </div>
           <div style={{ ...styles.navItem, ...(activeTab === 'zonas' ? styles.navItemActive : {}) }}
             onClick={() => setActiveTab('zonas')}>

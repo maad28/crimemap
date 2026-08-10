@@ -12,7 +12,7 @@ export default function AutoridadLogin({ onLogin }) {
     if (!secret) return;
     setLoading(true); setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/authority/stats', {
+      const res = await fetch(`${import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001'}/api/authority/stats`, {
         headers: { 'x-authority-secret': secret }
       });
       if (res.ok) { localStorage.setItem('autoridad_secret', secret); onLogin(secret); }

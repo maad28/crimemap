@@ -4,6 +4,15 @@ const pool    = require('../db/pool');
 const router  = express.Router();
 
 const hashDevice = (id) => crypto.createHash('sha256').update(id).digest('hex');
+
+// Piso mínimo de severidad para los tipos más graves — el reportante puede
+// subirlo, pero no bajarlo por debajo de este valor (ver conversación sobre
+// discrepancia testigo vs. víctima). La Autoridad puede reajustar al aprobar.
+const SEVERIDAD_MINIMA_POR_TIPO = {
+  'Homicidio': 5,
+  'Extorsión': 4,
+  'Asalto a mano armada': 3,
+};
 const { detectarZona } = require('../services/zonas');
 const {
   registrarNuevoReporte,
@@ -96,7 +105,7 @@ router.get('/nearby', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { tipo, descripcion, lat, lng, severidad, device_id } = req.body;
+    const { tipo, descripcion, lat, lng, severidad, device_id, rol } = req.body;
     if (!tipo || !lat || !lng || !device_id)
       return res.status(400).json({ error: 'Faltan campos requeridos' });
 
@@ -112,11 +121,15 @@ router.post('/', async (req, res) => {
       return res.status(429).json({ error: 'Demasiados reportes en poco tiempo. Espera unos minutos.' });
     }
 
+    const minimo = SEVERIDAD_MINIMA_POR_TIPO[tipo] || 1;
+    const severidadFinal = Math.max(severidad || 3, minimo);
+    const rolReportante = ['testigo', 'victima'].includes(rol) ? rol : null;
+
     const point = `SRID=4326;POINT(${lng} ${lat})`;
     const { rows } = await pool.query(
-      `INSERT INTO reports (tipo, descripcion, severidad, ubicacion, device_hash)
-       VALUES ($1,$2,$3,$4::geography,$5) RETURNING id, tipo, created_at`,
-      [tipo, descripcion || null, severidad || 3, point, device_hash]
+      `INSERT INTO reports (tipo, descripcion, severidad, ubicacion, device_hash, rol_reportante)
+       VALUES ($1,$2,$3,$4::geography,$5,$6) RETURNING id, tipo, created_at`,
+      [tipo, descripcion || null, severidadFinal, point, device_hash, rolReportante]
     );
 
     await registrarNuevoReporte(device_hash);
@@ -234,6 +247,118 @@ router.get('/tipos-por-zona', async (req, res) => {
     res.json({ total_general: totalGeneral, tipos: conPorcentaje });
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener tipos por zona' });
+  }
+});
+
+// GET /api/reports/tendencia-zona?lat=..&lng=..&radio=1000&meses=3
+// Compara el número de denuncias en la zona en los últimos N meses contra los N meses anteriores.
+router.get('/tendencia-zona', async (req, res) => {
+  try {
+    const { lat, lng, radio = 1000, meses = 3 } = req.query;
+    if (!lat || !lng) return res.status(400).json({ error: 'Faltan lat/lng' });
+
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE created_at > NOW() - INTERVAL '1 month' * $4
+        ) AS actual,
+        COUNT(*) FILTER (
+          WHERE created_at <= NOW() - INTERVAL '1 month' * $4
+            AND created_at >  NOW() - INTERVAL '1 month' * $4 * 2
+        ) AS anterior
+      FROM reports
+      WHERE estado != 'rechazado'
+        AND ST_DWithin(ubicacion, ST_MakePoint($2,$1)::geography, $3)
+    `, [lat, lng, radio, meses]);
+
+    const actual   = Number(rows[0].actual);
+    const anterior = Number(rows[0].anterior);
+    const variacion_pct = anterior > 0
+      ? Math.round(((actual - anterior) / anterior) * 1000) / 10
+      : null;
+
+    res.json({ actual, anterior, variacion_pct, meses: Number(meses) });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al calcular tendencia de zona' });
+  }
+});
+
+// GET /api/reports/exportar?lat=&lng=&radio=&dias=&mes=&dia_semana=&hora_min=&hora_max=&tipo=&severidad_min=
+// Exportación pública filtrable: por zona (lat/lng/radio), rango de días, mes, día de la
+// semana, rango de hora y tipo/severidad. Nunca incluye denuncias rechazadas.
+router.get('/exportar', async (req, res) => {
+  try {
+    const {
+      lat, lng, radio = 1000, dias, mes, dia_semana,
+      hora_min, hora_max, tipo, severidad_min, estado,
+    } = req.query;
+
+    const estadosPermitidos = ['pendiente', 'aprobado'];
+    const estadosFiltro = estado
+      ? estado.split(',').filter(e => estadosPermitidos.includes(e))
+      : estadosPermitidos;
+    const estadosFinal = estadosFiltro.length ? estadosFiltro : estadosPermitidos;
+
+    const conditions = [`estado = ANY($1)`];
+    const params = [estadosFinal];
+    let i = 2;
+
+    if (lat && lng) {
+      conditions.push(`ST_DWithin(ubicacion, ST_MakePoint($${i + 1},$${i})::geography, $${i + 2})`);
+      params.push(lat, lng, radio);
+      i += 3;
+    }
+    if (dias) {
+      conditions.push(`created_at > NOW() - INTERVAL '1 day' * $${i}`);
+      params.push(parseInt(dias));
+      i++;
+    }
+    if (mes) {
+      conditions.push(`EXTRACT(MONTH FROM created_at) = $${i}`);
+      params.push(parseInt(mes));
+      i++;
+    }
+    if (dia_semana !== undefined && dia_semana !== '') {
+      conditions.push(`EXTRACT(DOW FROM created_at) = $${i}`);
+      params.push(parseInt(dia_semana));
+      i++;
+    }
+    if (hora_min !== undefined && hora_min !== '') {
+      conditions.push(`EXTRACT(HOUR FROM created_at) >= $${i}`);
+      params.push(parseInt(hora_min));
+      i++;
+    }
+    if (hora_max !== undefined && hora_max !== '') {
+      conditions.push(`EXTRACT(HOUR FROM created_at) <= $${i}`);
+      params.push(parseInt(hora_max));
+      i++;
+    }
+    if (tipo) {
+      conditions.push(`tipo = ANY($${i})`);
+      params.push(tipo.split(','));
+      i++;
+    }
+    if (severidad_min) {
+      conditions.push(`severidad >= $${i}`);
+      params.push(parseInt(severidad_min));
+      i++;
+    }
+
+    const { rows } = await pool.query(`
+      SELECT id, tipo, descripcion, severidad, confirmaciones, estado,
+             ST_Y(ubicacion::geometry) AS lat,
+             ST_X(ubicacion::geometry) AS lng,
+             created_at
+      FROM reports
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY created_at DESC
+      LIMIT 3000
+    `, params);
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al exportar reportes' });
   }
 });
 

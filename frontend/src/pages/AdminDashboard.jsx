@@ -8,7 +8,7 @@ import AdminMetrics   from './AdminMetrics';
 import AutoridadAlertas from './AutoridadAlertas';
 
 
-const API = 'http://localhost:3001/api/admin';
+const API = `${import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001'}/api/admin`;
 
 function timeAgo(dateStr) {
   if (!dateStr) return '—';
