@@ -197,6 +197,14 @@ useEffect(() => {
   if (mapInstance.current) loadReports(mapInstance.current);
 }, [filtros, loadReports]);
 
+  // Refresco automático: vuelve a pedir los reportes cada 15s sin que el usuario recargue
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (mapInstance.current) loadReports(mapInstance.current);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [loadReports]);
+
 const updateMarkers = (data) => {
   if (!clusterGroup.current) return;
   clusterGroup.current.clearLayers();
@@ -325,7 +333,7 @@ const updateMarkers = (data) => {
   // ── MOBILE LAYOUT ──────────────────────────────────────────
   if (mobile) {
     return (
-      <div style={{ width:'100vw', height:'100vh', position:'relative', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
+      <div style={{ width:'100vw', height:'100dvh', position:'relative', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
 
         {/* Mapa ocupa toda la pantalla */}
         <div ref={mapRef} style={{ width:'100%', height:'100%' }}/>
@@ -354,6 +362,8 @@ const updateMarkers = (data) => {
           <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
         )}
         <ProximityAlert />
+        <LocateButton map={mapInstance.current} mobile={mobile} />
+        <PanicButton mobile={mobile} />
 
         {/* Formulario de denuncia */}
         {formPos && (
@@ -458,7 +468,7 @@ const updateMarkers = (data) => {
 
   // ── DESKTOP LAYOUT ─────────────────────────────────────────
   return (
-    <div style={{ display:'flex', height:'100vh', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
+    <div style={{ display:'flex', height:'100dvh', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
       <aside style={styles.sidebarLeft}>
         <div style={styles.logo}>
           <Map size={18} color="#E24B4A" strokeWidth={2.5}/>
