@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Map as MapIcon, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown } from 'lucide-react';import ReportForm      from './ReportForm';
+import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown } from 'lucide-react';import ReportForm      from './ReportForm';
 import ReportList      from './ReportList';
 import ConfirmToast    from './ConfirmToast';
 import PredictPanel    from './PredictPanel';
@@ -52,7 +52,6 @@ export default function MapView() {
   const clusterGroup  = useRef(null);
   const gridLayers    = useRef([]);
   const formMarker    = useRef(null);
-  const markersById   = useRef(new Map());
   const deviceId      = useDeviceId();
 
   const [reports,      setReports]      = useState([]);
@@ -209,7 +208,6 @@ useEffect(() => {
 const updateMarkers = (data) => {
   if (!clusterGroup.current) return;
   clusterGroup.current.clearLayers();
-  markersById.current.clear();
 
   const dataFiltrada = filtrosRef.current.soloConfiables
     ? data.filter(r => r.reputacion_puntos >= 130)
@@ -239,27 +237,13 @@ const updateMarkers = (data) => {
       <small>${r.confirmaciones} confirmaciones</small>
     `);
     clusterGroup.current.addLayer(marker);
-    markersById.current.set(r.id, marker);
   });
 };
-
-  // Hace zoom hasta que el marcador de ese reporte deje de estar agrupado en un cluster y abre su popup
-  const focusReport = (id) => {
-    const marker = markersById.current.get(id);
-    if (!marker || !clusterGroup.current) return;
-    clusterGroup.current.zoomToShowLayer(marker, () => marker.openPopup());
-  };
   const loadHeatmap = async (map) => {
   try {
     const { points } = await getHeatmap();
     if (!points.length) return;
     await import('leaflet.heat');
-    // El contenedor puede seguir sin tamaño real justo después de crearse el mapa
-    // (sobre todo la primera carga); sin esto, leaflet.heat dibuja sobre un canvas
-    // de ancho 0 y lanza un IndexSizeError que no queda atrapado por este try/catch
-    // porque ocurre dentro de un callback interno de Leaflet, no en esta función.
-    map.invalidateSize();
-    if (map.getSize().x === 0 || map.getSize().y === 0) return;
     if (heatLayer.current) heatLayer.current.remove();
     heatLayer.current = L.heatLayer(points,{
       radius: 45,
@@ -358,7 +342,7 @@ const updateMarkers = (data) => {
         {/* Header móvil */}
         <div style={mStyles.header}>
           <div style={mStyles.headerLogo}>
-            <MapIcon size={16} color="#E24B4A" strokeWidth={2.5}/>
+            <Map size={16} color="#E24B4A" strokeWidth={2.5}/>
             <span>CrimeMap GYE</span>
           </div>
           <div style={mStyles.headerCount}>
@@ -409,8 +393,7 @@ const updateMarkers = (data) => {
             </div>
             <div style={mStyles.bottomSheetContent}>
               {mobilePanel === 'lista' && (
-                <ReportList reports={reportsFiltrados} map={mapInstance.current}
-                  onSelect={(id) => { setMobilePanel(null); focusReport(id); }}/>              )}
+                <ReportList reports={reportsFiltrados} map={mapInstance.current}/>              )}
               {mobilePanel === 'menu' && (
                 <div style={mStyles.menuGrid}>
                   {[
@@ -488,7 +471,7 @@ const updateMarkers = (data) => {
     <div style={{ display:'flex', height:'100dvh', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
       <aside style={styles.sidebarLeft}>
         <div style={styles.logo}>
-          <MapIcon size={18} color="#E24B4A" strokeWidth={2.5}/>
+          <Map size={18} color="#E24B4A" strokeWidth={2.5}/>
           <span>CrimeMap GYE</span>
         </div>
         <nav style={styles.nav}>
@@ -609,7 +592,7 @@ const updateMarkers = (data) => {
     </div>
   )}
 </div>
-      <ReportList reports={reportsFiltrados} map={mapInstance.current} onSelect={focusReport}/>
+      <ReportList reports={reportsFiltrados} map={mapInstance.current}/>
       <PanicButton />
     </div>
   );
