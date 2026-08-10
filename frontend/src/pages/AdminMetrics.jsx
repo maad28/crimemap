@@ -212,6 +212,7 @@ export default function AdminMetrics() {
 
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Ranking final</div>
+            <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
                 <tr style={styles.thead}>
@@ -247,6 +248,7 @@ export default function AdminMetrics() {
                 })}
               </tbody>
             </table>
+            </div>
 
             <div style={styles.glossary}>
               <div style={styles.glossaryTitle}>Glosario de métricas</div>
@@ -273,7 +275,7 @@ export default function AdminMetrics() {
 
 const styles = {
   wrapper:        { display:'flex', flexDirection:'column', gap:'16px' },
-  headerRow:      { display:'flex', justifyContent:'space-between', alignItems:'flex-start' },
+  headerRow:      { display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10 },
   pageTitle:      { fontSize:'16px', fontWeight:700, color:'#1a1a1a' },
   pageSub:        { fontSize:'12px', color:'#aaa', marginTop:'2px' },
   recalcBtn:      { padding:'8px 16px', background:'#1a1a1a', border:'none', borderRadius:'8px', color:'#fff', fontSize:'12px', cursor:'pointer', fontWeight:500, display:'flex', alignItems:'center', gap:'6px' },
@@ -281,11 +283,11 @@ const styles = {
   loadingBox:     { background:'#fff', borderRadius:'12px', padding:'40px', textAlign:'center', boxShadow:'0 1px 4px rgba(0,0,0,.06)', display:'flex', flexDirection:'column', alignItems:'center', gap:'12px' },
   loadingText:    { fontSize:'14px', fontWeight:600, color:'#333' },
   loadingNote:    { fontSize:'12px', color:'#aaa' },
-  winnerCard:     { background:'linear-gradient(135deg,#1a1a1a,#2d2d2d)', borderRadius:'12px', padding:'20px', display:'flex', alignItems:'center', gap:'16px' },
+  winnerCard:     { background:'linear-gradient(135deg,#1a1a1a,#2d2d2d)', borderRadius:'12px', padding:'20px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' },
   winnerTitle:    { color:'#fff', fontWeight:700, fontSize:'15px', marginBottom:'4px' },
   winnerSub:      { color:'#888', fontSize:'12px' },
   winnerBadge:    { marginLeft:'auto', background:'rgba(255,255,255,.1)', color:'#fff', padding:'6px 14px', borderRadius:'8px', fontSize:'13px', fontWeight:600, whiteSpace:'nowrap' },
-  modelsGrid:     { display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'12px' },
+  modelsGrid:     { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:'12px' },
   modelCard:      { background:'#fff', borderRadius:'12px', padding:'18px', boxShadow:'0 1px 4px rgba(0,0,0,.06)', border:'2px solid transparent', position:'relative' },
   modelCardBest:  { boxShadow:'0 4px 16px rgba(0,0,0,.1)' },
   bestTag:        { position:'absolute', top:'-10px', right:'14px', color:'#fff', fontSize:'10px', fontWeight:700, padding:'2px 10px', borderRadius:'10px', display:'flex', alignItems:'center', gap:'3px' },
@@ -306,7 +308,8 @@ const styles = {
   section:        { background:'#fff', borderRadius:'12px', padding:'20px', boxShadow:'0 1px 4px rgba(0,0,0,.06)' },
   sectionTitle:   { fontSize:'14px', fontWeight:700, color:'#1a1a1a', marginBottom:'2px' },
   sectionSub:     { fontSize:'11px', color:'#aaa', marginBottom:'12px' },
-  table:          { width:'100%', borderCollapse:'collapse', marginTop:'12px' },
+  tableWrapper:   { overflowX:'auto', marginTop:'12px' },
+  table:          { width:'100%', borderCollapse:'collapse', minWidth:520 },
   thead:          { background:'#f5f5f5' },
   th:             { padding:'10px 14px', textAlign:'left', fontSize:'11px', fontWeight:600, color:'#888', textTransform:'uppercase', letterSpacing:'.04em' },
   tr:             { borderBottom:'1px solid #f5f5f5' },
@@ -316,7 +319,7 @@ const styles = {
   tooltipTitle:   { fontSize:'11px', color:'#888', marginBottom:'4px', fontWeight:600 },
   glossary:       { marginTop:'20px', background:'#fafafa', borderRadius:'10px', padding:'14px' },
   glossaryTitle:  { fontSize:'12px', fontWeight:700, color:'#555', marginBottom:'10px' },
-  glossaryGrid:   { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' },
+  glossaryGrid:   { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:'10px' },
   glossaryItem:   { display:'flex', flexDirection:'column', gap:'2px' },
   glossaryTerm:   { fontSize:'11px', fontWeight:700, color:'#333' },
   glossaryDef:    { fontSize:'11px', color:'#888', lineHeight:1.5 },
