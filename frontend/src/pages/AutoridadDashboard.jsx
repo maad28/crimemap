@@ -12,7 +12,7 @@ export default function AutoridadDashboard({ secret, onLogout }) {
   const [activeTab, setActiveTab] = useState('reportes');
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: '-apple-system,sans-serif', background: '#fafafa' }}>
+    <div style={{ display: 'flex', height: '100dvh', fontFamily: '-apple-system,sans-serif', background: '#fafafa' }}>
       <aside style={styles.sidebar}>
         <div style={styles.logo}>
           <ShieldCheck size={18} color="#1a1a1a" strokeWidth={2.5} />

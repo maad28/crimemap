@@ -220,8 +220,8 @@ export default function AdminDashboard({ secret, onLogout }) {
 }
 
 const styles = {
-  shell:           { height:'100vh', display:'flex', flexDirection:'column', background:'#f8f8f8', fontFamily:'-apple-system,sans-serif' },
-  loadingScreen:   { height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', color:'#aaa', gap:'10px', fontSize:'14px' },
+  shell:           { height:'100dvh', display:'flex', flexDirection:'column', background:'#f8f8f8', fontFamily:'-apple-system,sans-serif' },
+  loadingScreen:   { height:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', color:'#aaa', gap:'10px', fontSize:'14px' },
   header:          { background:'#1a1a1a', padding:'14px 24px', display:'flex', justifyContent:'space-between', alignItems:'center' },
   headerLeft:      { display:'flex', alignItems:'center', gap:'10px' },
   headerLogo:      { color:'#fff', fontWeight:700, fontSize:'15px' },
