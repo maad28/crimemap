@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown } from 'lucide-react';import ReportForm      from './ReportForm';
+import { Map as MapIcon, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown } from 'lucide-react';import ReportForm      from './ReportForm';
 import ReportList      from './ReportList';
 import ConfirmToast    from './ConfirmToast';
 import PredictPanel    from './PredictPanel';
@@ -352,7 +352,7 @@ const updateMarkers = (data) => {
         {/* Header móvil */}
         <div style={mStyles.header}>
           <div style={mStyles.headerLogo}>
-            <Map size={16} color="#E24B4A" strokeWidth={2.5}/>
+            <MapIcon size={16} color="#E24B4A" strokeWidth={2.5}/>
             <span>CrimeMap GYE</span>
           </div>
           <div style={mStyles.headerCount}>
@@ -482,7 +482,7 @@ const updateMarkers = (data) => {
     <div style={{ display:'flex', height:'100dvh', overflow:'hidden', fontFamily:'-apple-system,sans-serif' }}>
       <aside style={styles.sidebarLeft}>
         <div style={styles.logo}>
-          <Map size={18} color="#E24B4A" strokeWidth={2.5}/>
+          <MapIcon size={18} color="#E24B4A" strokeWidth={2.5}/>
           <span>CrimeMap GYE</span>
         </div>
         <nav style={styles.nav}>
