@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: crimemap-express
+    runtime: node
+    rootDir: backend-express
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/index.js
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      - key: AUTORIDAD_SECRET
+        sync: false
+      - key: GOOGLE_MAPS_KEY
+        sync: false
+
+  - type: web
+    name: crimemap-fastapi
+    runtime: python
+    rootDir: backend-fastapi
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false

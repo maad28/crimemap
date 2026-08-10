@@ -1,5 +1,3 @@
-#Users/mac/crimemap/backend-fastapi/routers/predict.py
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
@@ -15,6 +13,45 @@ AVAILABLE_MODELS = {
     "random_forest": "model_random_forest.pkl",
     "knn":           "model_knn.pkl",
 }
+
+# --- Definición única de "riesgo", usada también en backend-express
+# (zonas.js / authority.js) para zonas_concentracion y el ranking de
+# Analítica. Riesgo = severidad acumulada de reportes 'aprobado' por
+# semana, dentro de una ventana fija de historial reciente. Umbrales
+# fijos (no percentiles) para que sean explicables sin depender de
+# cuántos datos hay entrenados en un momento dado — mismos números en
+# los dos backends, si se ajustan hay que cambiarlos en ambos lados.
+DIAS_HISTORIAL      = 180
+SEMANAS_HISTORIAL   = DIAS_HISTORIAL / 7
+UMBRAL_RIESGO_ALTO  = 10   # puntos de severidad acumulada por semana
+UMBRAL_RIESGO_MEDIO = 4
+
+
+def clasificar_nivel(riesgo_semanal):
+    if riesgo_semanal >= UMBRAL_RIESGO_ALTO:
+        return "ALTO"
+    if riesgo_semanal >= UMBRAL_RIESGO_MEDIO:
+        return "MEDIO"
+    return "BAJO"
+
+ZONAS_CIUDAD = [
+    {"nombre": "Socio Vivienda",              "lat": -2.12214, "lng": -79.95721},
+    {"nombre": "Monte Sinaí",                 "lat": -2.11542, "lng": -79.97015},
+    {"nombre": "El Guasmo Sur",               "lat": -2.26182, "lng": -79.89845},
+    {"nombre": "Isla Trinitaria",             "lat": -2.24251, "lng": -79.91632},
+    {"nombre": "Bastión Popular",             "lat": -2.09115, "lng": -79.93124},
+    {"nombre": "Febres Cordero (Suburbio)",   "lat": -2.21453, "lng": -79.93241},
+    {"nombre": "Pascuales Centro",            "lat": -2.05941, "lng": -79.90422},
+    {"nombre": "Cristo del Consuelo",         "lat": -2.22635, "lng": -79.91421},
+    {"nombre": "Sauces (Etapas 1-9)",         "lat": -2.13142, "lng": -79.89215},
+    {"nombre": "Alborada",                    "lat": -2.14152, "lng": -79.89942},
+    {"nombre": "Mucho Lote 1",                "lat": -2.07841, "lng": -79.91232},
+    {"nombre": "Puerto Santa Ana",            "lat": -2.18025, "lng": -79.87412},
+    {"nombre": "Urdesa Central",              "lat": -2.16782, "lng": -79.90924},
+    {"nombre": "Los Ceibos",                  "lat": -2.16853, "lng": -79.93815},
+    {"nombre": "Kennedy Norte",               "lat": -2.15842, "lng": -79.89124},
+    {"nombre": "Barrio Centenario",           "lat": -2.22741, "lng": -79.89312},
+]
 
 class PredictRequest(BaseModel):
     lat:    float
@@ -58,6 +95,68 @@ def list_models():
         })
     return result
 
+@router.get("/ranking-zonas")
+def ranking_zonas(fecha: str, hora: int):
+    """
+    Ejecuta XGBoost sobre las 16 zonas reales de la ciudad, para una fecha y
+    hora dadas, y devuelve el ranking ordenado por riesgo estimado.
+    Responde: ¿cuál zona tiene mayor riesgo a esta hora específica?
+    """
+    path = os.path.join(MODELS_DIR, AVAILABLE_MODELS["xgboost"])
+    if not os.path.exists(path):
+        raise HTTPException(503, "Modelo XGBoost no entrenado")
+
+    with open(path, "rb") as f:
+        model = pickle.load(f)
+
+    resultados = []
+    for zona in ZONAS_CIUDAD:
+        features = build_features(zona["lat"], zona["lng"], fecha, hora)
+        pred = max(0, float(model.predict(features)[0]))
+        resultados.append({
+            "nombre": zona["nombre"],
+            "lat": zona["lat"], "lng": zona["lng"],
+            "riesgo_estimado": round(pred, 2),
+            "nivel_riesgo": clasificar_nivel(pred),
+        })
+
+    resultados_ordenados = sorted(resultados, key=lambda x: x["riesgo_estimado"], reverse=True)
+
+    return {
+        "fecha": fecha, "hora": hora,
+        "ranking": resultados_ordenados,
+        "zona_mayor_riesgo": resultados_ordenados[0]["nombre"] if resultados_ordenados else None,
+    }
+
+@router.get("/proximas-horas")
+def predecir_proximas_horas(fecha: str, lat: float = -2.1650, lng: float = -79.9400):
+    """
+    Ejecuta XGBoost para las 24 horas de una fecha dada, en un punto específico.
+    Responde: ¿cuál es la peor hora para esta zona en particular?
+    """
+    path = os.path.join(MODELS_DIR, AVAILABLE_MODELS["xgboost"])
+    if not os.path.exists(path):
+        raise HTTPException(503, "Modelo XGBoost no entrenado")
+
+    with open(path, "rb") as f:
+        model = pickle.load(f)
+
+    resultados = []
+    for hora in range(24):
+        features = build_features(lat, lng, fecha, hora)
+        pred = max(0, float(model.predict(features)[0]))
+        resultados.append({"hora": hora, "riesgo_estimado": round(pred, 2)})
+
+    resultados_ordenados = sorted(resultados, key=lambda x: x["riesgo_estimado"], reverse=True)
+
+    return {
+        "fecha": fecha,
+        "lat": lat, "lng": lng,
+        "por_hora": resultados,
+        "ranking": resultados_ordenados[:5],
+        "hora_mayor_riesgo": resultados_ordenados[0]["hora"] if resultados_ordenados else None,
+    }
+
 @router.post("/")
 def predecir(req: PredictRequest):
     if req.modelo not in AVAILABLE_MODELS:
@@ -72,23 +171,19 @@ def predecir(req: PredictRequest):
 
     features = build_features(req.lat, req.lng, req.fecha, req.hora)
     pred     = max(0, int(round(model.predict(features)[0])))
-    nivel    = "ALTO" if pred >= 8 else "MEDIO" if pred >= 4 else "BAJO"
+    nivel    = clasificar_nivel(pred)
 
     return {
         "lat": req.lat, "lng": req.lng,
         "fecha": req.fecha, "hora": req.hora,
         "modelo": req.modelo,
-        "robos_estimados": pred,
+        "riesgo_estimado": pred,
         "nivel_riesgo":    nivel,
         "color": {"ALTO": "#E24B4A", "MEDIO": "#BA7517", "BAJO": "#1D9E75"}[nivel],
     }
 
 @router.post("/predict-grid")
 def predecir_grid(fecha: str, hora: int, modelo: str = "xgboost"):
-    """
-    Predice para una grilla de puntos sobre Guayaquil.
-    Retorna lista de zonas con nivel de riesgo para pintar el mapa.
-    """
     path = os.path.join(MODELS_DIR, AVAILABLE_MODELS.get(modelo, "model_xgboost.pkl"))
     if not os.path.exists(path):
         raise HTTPException(503, f"Modelo '{modelo}' no entrenado")
@@ -96,20 +191,19 @@ def predecir_grid(fecha: str, hora: int, modelo: str = "xgboost"):
     with open(path, "rb") as f:
         model = pickle.load(f)
 
-    # Grilla sobre Guayaquil urbano
-    lats = np.arange(-2.260, -2.090, 0.008)
-    lngs = np.arange(-79.970, -79.870, 0.008)
+    lats = np.arange(-2.270, -2.050, 0.006)
+    lngs = np.arange(-79.980, -79.865, 0.006)
 
     results = []
     for lat in lats:
         for lng in lngs:
             features = build_features(lat, lng, fecha, hora)
             pred     = max(0, float(model.predict(features)[0]))
-            nivel    = "ALTO" if pred >= 8 else "MEDIO" if pred >= 4 else "BAJO"
+            nivel    = clasificar_nivel(pred)
             results.append({
                 "lat": round(float(lat), 4),
                 "lng": round(float(lng), 4),
-                "robos_estimados": round(pred, 2),
+                "riesgo_estimado": round(pred, 2),
                 "nivel_riesgo":    nivel,
                 "color": {"ALTO": "#E24B4A", "MEDIO": "#BA7517", "BAJO": "#1D9E75"}[nivel],
             })
@@ -118,7 +212,25 @@ def predecir_grid(fecha: str, hora: int, modelo: str = "xgboost"):
 
 @router.post("/train")
 def entrenar():
-    """Entrena los 3 modelos con los datos históricos."""
+    """
+    Entrena los 3 modelos con los datos históricos.
+
+    El target es la severidad acumulada por semana (riesgo ≈ frecuencia ×
+    severidad, "daño esperado"), no la cantidad de reportes — una zona con
+    10 vandalismos ya no pesa más que una con 2 homicidios. Se agrupa por
+    celda espacio-temporal (lat/lng redondeado a ~1.1km, hora del día) sobre
+    los últimos DIAS_HISTORIAL días, y se divide entre las semanas de esa
+    ventana para que el número sea una TASA comparable, no un total crudo que
+    crece solo porque pasó más tiempo.
+
+    Mismos umbrales fijos (ALTO/MEDIO) y misma unidad (severidad/semana) que
+    zonas_concentracion y el ranking de Analítica en backend-express — así
+    "riesgo alto" significa lo mismo lo mires desde donde lo mires, ya sea
+    observado (zonas reales) o predicho (este modelo).
+
+    Solo usa reportes 'aprobado', igual que el mapa de calor y el clustering
+    exploratorio, para no aprender de reportes falsos o sin verificar.
+    """
     from db.connection import get_conn
     from xgboost import XGBRegressor
     from sklearn.ensemble import RandomForestRegressor
@@ -127,19 +239,22 @@ def entrenar():
 
     conn = get_conn()
     cur  = conn.cursor()
-    cur.execute("""
+    cur.execute(f"""
         SELECT EXTRACT(HOUR  FROM created_at)::int AS hora,
                EXTRACT(DOW   FROM created_at)::int AS dia_semana,
                EXTRACT(MONTH FROM created_at)::int AS mes,
                ST_Y(ubicacion::geometry)            AS lat,
-               ST_X(ubicacion::geometry)            AS lng
+               ST_X(ubicacion::geometry)            AS lng,
+               severidad
         FROM reports
+        WHERE estado = 'aprobado'
+          AND created_at > NOW() - INTERVAL '{DIAS_HISTORIAL} days'
     """)
     rows = cur.fetchall()
     cur.close(); conn.close()
 
     if len(rows) < 50:
-        raise HTTPException(400, "Necesitas al menos 50 reportes para entrenar")
+        raise HTTPException(400, "Necesitas al menos 50 reportes aprobados para entrenar")
 
     df = pd.DataFrame(rows)
     for col, period in [("hora", 24), ("dia_semana", 7), ("mes", 12)]:
@@ -148,11 +263,12 @@ def entrenar():
 
     df["lat_g"] = (df["lat"] * 100).round() / 100
     df["lng_g"] = (df["lng"] * 100).round() / 100
-    target = df.groupby(["lat_g", "lng_g", "hora"]).size().reset_index(name="conteo")
-    df     = df.merge(target, on=["lat_g", "lng_g", "hora"], how="left")
+    target = df.groupby(["lat_g", "lng_g", "hora"])["severidad"].sum().reset_index(name="riesgo_total")
+    target["riesgo"] = target["riesgo_total"] / SEMANAS_HISTORIAL
+    df = df.merge(target[["lat_g", "lng_g", "hora", "riesgo"]], on=["lat_g", "lng_g", "hora"], how="left")
 
     feats = ["hora_sin","hora_cos","dia_semana_sin","dia_semana_cos","mes_sin","mes_cos","lat","lng"]
-    X, y  = df[feats].values, df["conteo"].values
+    X, y  = df[feats].values, df["riesgo"].values
 
     os.makedirs(MODELS_DIR, exist_ok=True)
 
@@ -178,13 +294,19 @@ def entrenar():
         resultados[nombre] = "✅ entrenado"
         print(f"  {nombre} guardado en {path}")
 
-    return {"ok": True, "samples": len(df), "modelos": resultados}
-
+    return {
+        "ok": True, "samples": len(df), "modelos": resultados,
+        "umbrales_riesgo": {"medio": UMBRAL_RIESGO_MEDIO, "alto": UMBRAL_RIESGO_ALTO},
+        "unidad": "severidad acumulada por semana",
+    }
 
 @router.get("/metrics")
 def get_metrics():
     """
     Evalúa los 3 modelos con cross-validation y retorna métricas de precisión.
+    Usa el mismo criterio de datos y el mismo target que /train: reportes en
+    estado 'aprobado', prediciendo riesgo (severidad acumulada por semana)
+    por celda espacio-temporal, no cantidad de reportes.
     """
     from db.connection import get_conn
     from xgboost import XGBRegressor
@@ -197,19 +319,22 @@ def get_metrics():
 
     conn = get_conn()
     cur  = conn.cursor()
-    cur.execute("""
+    cur.execute(f"""
         SELECT EXTRACT(HOUR  FROM created_at)::int AS hora,
                EXTRACT(DOW   FROM created_at)::int AS dia_semana,
                EXTRACT(MONTH FROM created_at)::int AS mes,
                ST_Y(ubicacion::geometry)            AS lat,
-               ST_X(ubicacion::geometry)            AS lng
+               ST_X(ubicacion::geometry)            AS lng,
+               severidad
         FROM reports
+        WHERE estado = 'aprobado'
+          AND created_at > NOW() - INTERVAL '{DIAS_HISTORIAL} days'
     """)
     rows = cur.fetchall()
     cur.close(); conn.close()
 
     if len(rows) < 50:
-        raise HTTPException(400, "Necesitas al menos 50 reportes")
+        raise HTTPException(400, "Necesitas al menos 50 reportes aprobados")
 
     df = pd.DataFrame(rows)
     for col, period in [("hora",24),("dia_semana",7),("mes",12)]:
@@ -218,11 +343,12 @@ def get_metrics():
 
     df["lat_g"] = (df["lat"]*100).round()/100
     df["lng_g"] = (df["lng"]*100).round()/100
-    target = df.groupby(["lat_g","lng_g","hora"]).size().reset_index(name="conteo")
-    df     = df.merge(target, on=["lat_g","lng_g","hora"], how="left")
+    target = df.groupby(["lat_g","lng_g","hora"])["severidad"].sum().reset_index(name="riesgo_total")
+    target["riesgo"] = target["riesgo_total"] / SEMANAS_HISTORIAL
+    df = df.merge(target[["lat_g","lng_g","hora","riesgo"]], on=["lat_g","lng_g","hora"], how="left")
 
     feats = ["hora_sin","hora_cos","dia_semana_sin","dia_semana_cos","mes_sin","mes_cos","lat","lng"]
-    X, y  = df[feats].values, df["conteo"].values
+    X, y  = df[feats].values, df["riesgo"].values
 
     modelos = {
         "xgboost":       XGBRegressor(n_estimators=200, max_depth=6, learning_rate=0.05, random_state=42),
@@ -260,7 +386,6 @@ def get_metrics():
             "cv_folds":  5,
         }
 
-    # Ranking por MAE (menor es mejor)
     ranking = sorted(
         [(k, v) for k, v in results.items() if "error" not in v],
         key=lambda x: x[1]["mae"]

@@ -13,7 +13,9 @@ def get_clusters(eps_meters: float = 500, min_samples: int = 3):
     cur.execute("""
         SELECT id, ST_Y(ubicacion::geometry) AS lat,
                ST_X(ubicacion::geometry) AS lng, tipo
-        FROM reports WHERE created_at > NOW() - INTERVAL '30 days'
+        FROM reports
+        WHERE created_at > NOW() - INTERVAL '30 days'
+          AND estado = 'aprobado'
     """)
     rows = cur.fetchall()
     cur.close(); conn.close()

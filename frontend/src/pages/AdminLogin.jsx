@@ -12,7 +12,7 @@ export default function AdminLogin({ onLogin }) {
     if (!secret) return;
     setLoading(true); setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/admin/stats', {
+      const res = await fetch(`${import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001'}/api/admin/stats`, {
         headers: { 'x-admin-secret': secret }
       });
       if (res.ok) { localStorage.setItem('admin_secret', secret); onLogin(secret); }

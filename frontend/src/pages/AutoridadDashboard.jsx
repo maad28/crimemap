@@ -1,8 +1,12 @@
+//frontend/src/pages/AutoridadDashboard.jsx
 import { useState } from 'react';
-import { ShieldCheck, FileText, BarChart2, MapPinned, LogOut } from 'lucide-react';
+import { ShieldCheck, FileText, BarChart2, MapPinned, LogOut, ShieldAlert, AlertTriangle } from 'lucide-react';
 import AutoridadReportes from './AutoridadReportes';
 import AutoridadAnalitica from './AutoridadAnalitica';
 import AutoridadZonas from './AutoridadZonas';
+import AutoridadReputacion from './AutoridadReputacion';
+import AutoridadAlertas from './AutoridadAlertas';
+
 
 export default function AutoridadDashboard({ secret, onLogout }) {
   const [activeTab, setActiveTab] = useState('reportes');
@@ -19,7 +23,7 @@ export default function AutoridadDashboard({ secret, onLogout }) {
           <div style={{ ...styles.navItem, ...(activeTab === 'reportes' ? styles.navItemActive : {}) }}
             onClick={() => setActiveTab('reportes')}>
             <FileText size={16} strokeWidth={1.8} />
-            <span>Reportes</span>
+            <span>Incidentes</span>
           </div>
           <div style={{ ...styles.navItem, ...(activeTab === 'zonas' ? styles.navItemActive : {}) }}
             onClick={() => setActiveTab('zonas')}>
@@ -30,6 +34,16 @@ export default function AutoridadDashboard({ secret, onLogout }) {
             onClick={() => setActiveTab('analitica')}>
             <BarChart2 size={16} strokeWidth={1.8} />
             <span>Analítica</span>
+          </div>
+          <div style={{ ...styles.navItem, ...(activeTab === 'alertas' ? styles.navItemActive : {}) }}
+            onClick={() => setActiveTab('alertas')}>
+            <AlertTriangle size={16} strokeWidth={1.8} />
+            <span>Alertas</span>
+          </div>
+          <div style={{ ...styles.navItem, ...(activeTab === 'reputacion' ? styles.navItemActive : {}) }}
+            onClick={() => setActiveTab('reputacion')}>
+            <ShieldAlert size={16} strokeWidth={1.8} />
+            <span>Reputación</span>
           </div>
         </nav>
 
@@ -42,6 +56,8 @@ export default function AutoridadDashboard({ secret, onLogout }) {
         {activeTab === 'reportes'  && <AutoridadReportes secret={secret} />}
         {activeTab === 'zonas'     && <AutoridadZonas secret={secret} />}
         {activeTab === 'analitica' && <AutoridadAnalitica secret={secret} />}
+        {activeTab === 'reputacion' && <AutoridadReputacion secret={secret} />}
+        {activeTab === 'alertas' && <AutoridadAlertas secret={secret} />}
       </main>
     </div>
   );

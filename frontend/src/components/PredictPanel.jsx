@@ -1,17 +1,12 @@
 //Users/mac/crimemap/frontend/src/components/PredictPanel.jsx
 import { useState, useEffect } from 'react';
-import { Zap, Trees, Navigation, Calendar, Clock } from 'lucide-react';
+import { Zap, Calendar, Clock } from 'lucide-react';
 import { apiFastapi } from '../api/client';
 
-const MODELO_INFO = {
-  xgboost:       { Icon: Zap,        color:'#534AB7', label:'XGBoost'       },
-  random_forest: { Icon: Trees,      color:'#1D9E75', label:'Random Forest' },
-  knn:           { Icon: Navigation, color:'#BA7517', label:'KNN Espacial'  },
-};
+const MODELO = 'xgboost'; // XGBoost es el modelo elegido según la comparación de precisión en Admin → Métricas
 
 export default function PredictPanel({ map, onGridData }) {
-  const [models,   setModels]   = useState([]);
-  const [selected, setSelected] = useState('xgboost');
+  const [entrenado, setEntrenado] = useState(true);
   const [fecha,    setFecha]    = useState(() => new Date().toISOString().split('T')[0]);
   const [hora,     setHora]     = useState(new Date().getHours());
   const [loading,  setLoading]  = useState(false);
@@ -19,21 +14,23 @@ export default function PredictPanel({ map, onGridData }) {
   const [error,    setError]    = useState('');
 
   useEffect(() => {
-    apiFastapi.get('/predict/models').then(r => setModels(r.data));
+    apiFastapi.get('/predict/models').then(r => {
+      const xgb = r.data.find(m => m.id === MODELO);
+      if (xgb) setEntrenado(xgb.entrenado);
+    });
   }, []);
 
   const predecirGrid = async () => {
     try {
       setLoading(true); setError(''); setResult(null);
       const { data } = await apiFastapi.post('/predict/predict-grid', null, {
-        params: { fecha, hora, modelo: selected }
+        params: { fecha, hora, modelo: MODELO }
       });
       onGridData(data.zonas);
       setResult({
         altas:  data.zonas.filter(z => z.nivel_riesgo === 'ALTO').length,
         medias: data.zonas.filter(z => z.nivel_riesgo === 'MEDIO').length,
         total:  data.zonas.length,
-        modelo: selected,
       });
     } catch { setError('Error al predecir. Verifica que el modelo esté entrenado.'); }
     finally { setLoading(false); }
@@ -46,28 +43,11 @@ export default function PredictPanel({ map, onGridData }) {
       <div style={styles.title}>Predicción territorial</div>
 
       <div style={styles.section}>
-        <div style={styles.label}>Modelo predictivo</div>
-        {models.map(m => {
-          const info = MODELO_INFO[m.id] || {};
-          const sel  = selected === m.id;
-          const Icon = info.Icon;
-          return (
-            <div key={m.id}
-              style={{...styles.modelCard, ...(sel ? {...styles.modelCardSel, borderColor: info.color} : {}),
-                      ...(m.entrenado ? {} : styles.modelCardDisabled)}}
-              onClick={() => m.entrenado && setSelected(m.id)}>
-              <div style={styles.modelTop}>
-                {Icon && <Icon size={14} color={sel ? info.color : '#aaa'} strokeWidth={2}/>}
-                <span style={{...styles.modelName, ...(sel ? {color: info.color} : {})}}>
-                  {info.label || m.nombre}
-                </span>
-                {!m.entrenado && <span style={styles.noTrain}>sin entrenar</span>}
-                {sel && <div style={{...styles.selDot, background: info.color}}/>}
-              </div>
-              <div style={styles.modelDesc}>{m.descripcion}</div>
-            </div>
-          );
-        })}
+        <div style={styles.modeloTag}>
+          <Zap size={13} color="#534AB7" strokeWidth={2}/>
+          <span>Modelo: XGBoost</span>
+          {!entrenado && <span style={styles.noTrain}>sin entrenar</span>}
+        </div>
       </div>
 
       <div style={styles.section}>
@@ -93,8 +73,8 @@ export default function PredictPanel({ map, onGridData }) {
 
       {error && <div style={styles.error}>{error}</div>}
 
-      <button style={{...styles.btn, ...(loading ? styles.btnDisabled : {})}}
-              onClick={predecirGrid} disabled={loading}>
+      <button style={{...styles.btn, ...((loading || !entrenado) ? styles.btnDisabled : {})}}
+              onClick={predecirGrid} disabled={loading || !entrenado}>
         {loading ? 'Calculando...' : 'Ver predicción en mapa'}
       </button>
 
@@ -126,14 +106,8 @@ const styles = {
   title:              { fontWeight:600, fontSize:'13px', marginBottom:'12px', color:'#333' },
   section:            { marginBottom:'12px' },
   label:              { fontSize:'11px', fontWeight:500, color:'#888', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'.04em', display:'flex', alignItems:'center', gap:'4px' },
-  modelCard:          { border:'1px solid #eee', borderRadius:'8px', padding:'8px 10px', marginBottom:'5px', cursor:'pointer' },
-  modelCardSel:       { background:'#fafafe' },
-  modelCardDisabled:  { opacity:.5, cursor:'not-allowed' },
-  modelTop:           { display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' },
-  modelName:          { fontSize:'12px', fontWeight:600, flex:1, color:'#555' },
-  selDot:             { width:'6px', height:'6px', borderRadius:'50%' },
-  noTrain:            { fontSize:'10px', color:'#aaa', background:'#f5f5f5', padding:'1px 6px', borderRadius:'8px' },
-  modelDesc:          { fontSize:'11px', color:'#aaa', lineHeight:1.4 },
+  modeloTag:          { display:'flex', alignItems:'center', gap:'6px', border:'1px solid #eee', borderRadius:'8px', padding:'8px 10px', fontSize:'12px', fontWeight:600, color:'#534AB7' },
+  noTrain:            { fontSize:'10px', color:'#aaa', background:'#f5f5f5', padding:'1px 6px', borderRadius:'8px', fontWeight:500 },
   input:              { width:'100%', border:'1px solid #eee', borderRadius:'8px', padding:'6px 10px', fontSize:'12px', boxSizing:'border-box' },
   slider:             { width:'100%', accentColor:'#534AB7' },
   horaLabels:         { display:'flex', justifyContent:'space-between', fontSize:'9px', color:'#bbb', marginTop:'2px' },

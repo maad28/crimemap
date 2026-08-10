@@ -6,7 +6,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 
-const API = 'http://localhost:3001/api/admin';
+const API = `${import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001'}/api/admin`;
 
 const ZONAS_CENTROS = [
   { nombre: 'Centro histórico', lat: -2.1894, lng: -79.8891 },

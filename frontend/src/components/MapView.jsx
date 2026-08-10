@@ -5,8 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal } from 'lucide-react';
-import ReportForm      from './ReportForm';
+import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown } from 'lucide-react';import ReportForm      from './ReportForm';
 import ReportList      from './ReportList';
 import ConfirmToast    from './ConfirmToast';
 import PredictPanel    from './PredictPanel';
@@ -15,6 +14,14 @@ import HistorialPanel  from './HistorialPanel';
 import FilterPanel     from './FilterPanel';
 import { useDeviceId } from '../hooks/useDeviceId';
 import { getReports, getHeatmap, getNearby, getZonasVerificadas } from '../api/reports';
+import PanicButton from './PanicButton';
+import ProximityAlert from './ProximityAlert';
+import LocateButton from './LocateButton';
+import PoliceMarkers from './PoliceMarkers';
+import SafeRoutePanel from './SafeRoutePanel';
+import { Link } from 'react-router-dom';
+import AnalyticsDashboard from '../pages/AnalyticsDashboard';
+import ReportesExport from '../pages/ReportesExport';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -24,8 +31,15 @@ L.Icon.Default.mergeOptions({
 });
 
 const TIPO_COLORS = {
-  'Robo':'#E24B4A','Asalto':'#BA7517',
-  'Punto GDO':'#534AB7','Vandalismo':'#1D9E75','Otro':'#888',
+  'Robo a persona':'#E24B4A',
+  'Robo a domicilio':'#D85A30',
+  'Robo a vehículo':'#F0997B',
+  'Asalto a mano armada':'#BA7517',
+  'Homicidio':'#791F1F',
+  'Extorsión':'#993556',
+  'Vandalismo':'#1D9E75',
+  'Punto GDO':'#534AB7',
+  'Otro':'#888',
 };
 
 const isMobile = () => window.innerWidth < 768;
@@ -49,11 +63,12 @@ export default function MapView() {
   const [loading,      setLoading]      = useState(false);
   const [mobile,       setMobile]       = useState(isMobile());
   const [mobilePanel,  setMobilePanel]  = useState(null); // 'menu' | 'lista' | null
-  const [filtros,      setFiltros]      = useState({
+  const [filtros, setFiltros] = useState({
     dias: 30,
     tipos: [],
     severidadMin: 1,
     estados: ['aprobado', 'pendiente'],
+    soloConfiables: false, // ← agregar
   });
 
   const filtrosRef = useRef(filtros);
@@ -153,6 +168,9 @@ export default function MapView() {
       });
     } catch (e) { console.error(e); }
   };
+  const reportsFiltrados = filtros.soloConfiables
+  ? reports.filter(r => r.reputacion_puntos >= 130)
+  : reports;
 
   const handleMoveMap = (lat, lng) => {
     if (!mapInstance.current) return;
@@ -175,48 +193,69 @@ export default function MapView() {
   }, []);
 
   // Recargar cuando cambian los filtros
-  useEffect(() => {
-    if (mapInstance.current) loadReports(mapInstance.current);
-  }, [filtros, loadReports]);
+useEffect(() => {
+  if (mapInstance.current) loadReports(mapInstance.current);
+}, [filtros, loadReports]);
 
-  const updateMarkers = (data) => {
-    if (!clusterGroup.current) return;
-    clusterGroup.current.clearLayers();
-    data.forEach(r => {
-      const color  = TIPO_COLORS[r.tipo] || '#888';
-      const esPend = r.estado === 'pendiente';
-      const icon   = L.divIcon({
-        className:'',
-        html:`<div style="position:relative;width:12px;height:12px;border-radius:50%;
-          background:${color};border:2px solid white;opacity:${esPend ? 0.55 : 1};
-          box-shadow:0 1px 3px rgba(0,0,0,.4)">
-          ${esPend ? '<div style="position:absolute;top:-4px;right:-4px;font-size:9px;">⏳</div>' : ''}
-        </div>`,
-        iconSize:[12,12], iconAnchor:[6,6],
-      });
-      const marker = L.marker([r.lat,r.lng],{icon}).bindPopup(`
-        <b>${r.tipo}</b> ${esPend
-          ? '<span style="color:#BA7517;font-size:11px;">(pendiente de revisión)</span>'
-          : '<span style="color:#1D9E75;font-size:11px;">✓ verificado</span>'}<br>
-        ${r.descripcion||'<i>Sin descripción</i>'}<br>
-        <small>${r.confirmaciones} confirmaciones</small>
-      `);
-      clusterGroup.current.addLayer(marker);
+const updateMarkers = (data) => {
+  if (!clusterGroup.current) return;
+  clusterGroup.current.clearLayers();
+
+  const dataFiltrada = filtrosRef.current.soloConfiables
+    ? data.filter(r => r.reputacion_puntos >= 130)
+    : data;
+
+  dataFiltrada.forEach(r => {
+    const color  = TIPO_COLORS[r.tipo] || '#888';
+    const esPend = r.estado === 'pendiente';
+    const esConfiable = r.reputacion_puntos >= 130;
+
+    const icon   = L.divIcon({
+      className:'',
+      html:`<div style="position:relative;width:12px;height:12px;border-radius:50%;
+        background:${color};border:2px solid white;opacity:${esPend ? 0.55 : 1};
+        box-shadow:0 1px 3px rgba(0,0,0,.4)">
+        ${esPend ? '<div style="position:absolute;top:-4px;right:-4px;font-size:9px;">⏳</div>' : ''}
+        ${esConfiable ? '<div style="position:absolute;top:-5px;left:-5px;font-size:10px;">⭐</div>' : ''}
+      </div>`,
+      iconSize:[12,12], iconAnchor:[6,6],
     });
-  };
-
+    const marker = L.marker([r.lat,r.lng],{icon}).bindPopup(`
+      <b>${r.tipo}</b> ${esPend
+        ? '<span style="color:#BA7517;font-size:11px;">(pendiente de revisión)</span>'
+        : '<span style="color:#1D9E75;font-size:11px;">✓ verificado</span>'}<br>
+      ${esConfiable ? '<span style="color:#EF9F27;font-size:11px;">⭐ Reportante confiable</span><br>' : ''}
+      ${r.descripcion||'<i>Sin descripción</i>'}<br>
+      <small>${r.confirmaciones} confirmaciones</small>
+    `);
+    clusterGroup.current.addLayer(marker);
+  });
+};
   const loadHeatmap = async (map) => {
-    try {
-      const { points } = await getHeatmap();
-      if (!points.length) return;
-      await import('leaflet.heat');
-      if (heatLayer.current) heatLayer.current.remove();
-      heatLayer.current = L.heatLayer(points,{
-        radius:25, blur:20, maxZoom:17,
-        gradient:{ 0.2:'#1D9E75', 0.5:'#BA7517', 0.8:'#E24B4A' },
-      }).addTo(map);
-    } catch(e) { console.error(e); }
-  };
+  try {
+    const { points } = await getHeatmap();
+    if (!points.length) return;
+    await import('leaflet.heat');
+    if (heatLayer.current) heatLayer.current.remove();
+    heatLayer.current = L.heatLayer(points,{
+      radius: 45,
+      blur: 35,
+      maxZoom: 17,
+      max: 5, // techo real de peso: severidad(5), sin confirmaciones — ver heatmap.py
+      minOpacity: 0.05, // antes 0.35 — forzaba a que hasta el borde sin señal real se viera pintado
+      gradient: {
+        // Sin verde: el verde se leía como "zona segura" cuando en realidad solo
+        // era "casi sin acumulación de calor" (el borde difuso de cualquier punto).
+        // Ahora las zonas sin señal real quedan transparentes, no coloreadas.
+        0:    'rgba(239,159,39,0)', // transparente en la base
+        0.35: '#F4C542', // amarillo — recién empieza a haber señal real
+        0.6:  '#EF9F27', // naranja
+        0.8:  '#BA7517', // naranja oscuro
+        1.0:  '#E24B4A', // rojo
+      },
+    }).addTo(map);
+  } catch(e) { console.error(e); }
+};
 
   const toggleHeatmap = () => {
     if (!heatLayer.current||!mapInstance.current) return;
@@ -242,7 +281,7 @@ export default function MapView() {
       const rect = L.rectangle(
         [[z.lat-0.004,z.lng-0.004],[z.lat+0.004,z.lng+0.004]],
         { color:z.color, fillColor:z.color, fillOpacity:opacity, weight:0 }
-      ).bindPopup(`<b>Predicción</b><br>Nivel: <b style="color:${z.color}">${z.nivel_riesgo}</b><br>Eventos: ${z.robos_estimados}`)
+      ).bindPopup(`<b>Predicción</b><br>Nivel: <b style="color:${z.color}">${z.nivel_riesgo}</b><br>Riesgo estimado: ${z.riesgo_estimado}`)
        .addTo(mapInstance.current);
       gridLayers.current.push(rect);
     });
@@ -277,6 +316,9 @@ export default function MapView() {
     if (activeTab==='analitica')  return <AnalyticaPanel reports={reports}/>;
     if (activeTab==='prediccion') return <PredictPanel map={mapInstance.current} onGridData={handleGridData}/>;
     if (activeTab==='historial')  return <HistorialPanel map={mapInstance.current}/>;
+    if (activeTab==='ruta')       return <SafeRoutePanel map={mapInstance.current}/>;
+    if (activeTab==='reportes-export') return <ReportesExport/>;
+
     return null;
   };
 
@@ -287,6 +329,7 @@ export default function MapView() {
 
         {/* Mapa ocupa toda la pantalla */}
         <div ref={mapRef} style={{ width:'100%', height:'100%' }}/>
+          <PoliceMarkers map={mapInstance.current} />
 
         {/* Header móvil */}
         <div style={mStyles.header}>
@@ -310,6 +353,7 @@ export default function MapView() {
         {nearbyList.length > 0 && (
           <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
         )}
+        <ProximityAlert />
 
         {/* Formulario de denuncia */}
         {formPos && (
@@ -339,14 +383,17 @@ export default function MapView() {
             </div>
             <div style={mStyles.bottomSheetContent}>
               {mobilePanel === 'lista' && (
-                <ReportList reports={reports} map={mapInstance.current}/>
-              )}
+                <ReportList reports={reportsFiltrados} map={mapInstance.current}/>              )}
               {mobilePanel === 'menu' && (
                 <div style={mStyles.menuGrid}>
                   {[
                     { id:'analitica',  label:'Analítica',  Icon:BarChart2  },
                     { id:'prediccion', label:'Predicción', Icon:Clock      },
                     { id:'historial',  label:'Historial',  Icon:History    },
+                    { id:'ruta',       label:'Ruta segura',  Icon:Route     }, // ← agregar esta línea
+                    { id:'analitica-avanzada',label:'Analítica avanzada', Icon:TrendingUp },
+                    { id:'reportes-export',label:'Reportes', Icon:FileDown },
+
                   ].map(({ id, label, Icon }) => (
                     <div key={id} style={mStyles.menuItem}
                       onClick={() => { setActiveTab(id); setMobilePanel('panel'); }}>
@@ -385,6 +432,10 @@ export default function MapView() {
             <div style={{width:8,height:8,borderRadius:'50%',border:'2px dashed #534AB7',flexShrink:0}}/>
             <span>Zona verificada</span>
           </div>
+          <div style={mStyles.legendItem}> {/* o styles.legendItem en desktop */}
+            <span style={{ fontSize: 9 }}>⭐</span>
+            <span>Reportante confiable</span>
+          </div>
         </div>
 
         {/* Tab bar inferior */}
@@ -420,6 +471,10 @@ export default function MapView() {
             { id:'analitica',  label:'Analítica',    Icon:BarChart2  },
             { id:'prediccion', label:'Predicción',   Icon:Clock     },
             { id:'historial',  label:'Historial',    Icon:History   },
+            { id:'ruta',       label:'Ruta segura',  Icon:Route     }, 
+            { id:'analitica-avanzada',label:'Analítica avanzada', Icon:TrendingUp },
+
+
           ].map(({ id, label, Icon }) => (
             <div key={id}
               style={{...styles.navItem,...(activeTab===id?styles.navItemActive:{})}}
@@ -428,6 +483,7 @@ export default function MapView() {
               <span>{label}</span>
             </div>
           ))}
+
           <div style={styles.navSection}>Denuncias</div>
           <div style={styles.navItem} onClick={openNewReport}>
             <Plus size={15} strokeWidth={1.8}/>
@@ -447,56 +503,87 @@ export default function MapView() {
             </div>
           ))}
         </nav>
-        {activeTab !== 'mapa' && (
+        {activeTab !== 'mapa' && activeTab !== 'analitica-avanzada' && activeTab !== 'reportes-export' && (
           <div style={styles.panelWrapper}>{renderLeftPanel()}</div>
         )}
-        <div style={styles.mapInfo}>
-          <div style={styles.mapInfoLabel}>Denuncias visibles</div>
-          <div style={styles.mapInfoCount}>{reports.length}</div>
+        <div style={styles.sidebarBottom}>
+          <div
+            style={{...styles.reportesBtn, ...(activeTab==='reportes-export' ? styles.reportesBtnActive : {})}}
+            onClick={() => setActiveTab('reportes-export')}>
+            <FileDown size={15} strokeWidth={1.8}/>
+            <span>Reportes</span>
+          </div>
+          <div style={styles.mapInfo}>
+            <div style={styles.mapInfoLabel}>Denuncias visibles</div>
+            <div style={styles.mapInfoCount}>{reports.length}</div>
+          </div>
         </div>
       </aside>
-
       <div style={{ flex:1, position:'relative' }}>
-        <div ref={mapRef} style={{ width:'100%', height:'100%' }}/>
-        {activeTab==='prediccion' && (
-          <div style={styles.predictBanner}>
-            Modo predicción — selecciona fecha, hora y modelo en el panel
-          </div>
-        )}
-        {loading && <div style={styles.loading}>Actualizando...</div>}
-        <FilterPanel filtros={filtros} onChange={setFiltros} />
-        <div style={styles.hint}>
-          <MousePointerClick size={13} strokeWidth={1.8}/>
-          <span>Doble clic para denunciar</span>
-        </div>
-        {formPos && (
-          <div style={styles.formOverlay}>
-            <ReportForm
-              lat={formPos.lat} lng={formPos.lng}
-              deviceId={deviceId}
-              onCreated={handleReportCreated}
-              onClose={handleClose}
-              onMoveMap={handleMoveMap}
-            />
-          </div>
-        )}
-        {nearbyList.length > 0 && (
-          <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
-        )}
-        <div style={styles.legend}>
-          {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
-            <div key={tipo} style={styles.legendItem}>
-              <div style={{...styles.legendDot, background:color}}/>
-              <span>{tipo}</span>
-            </div>
-          ))}
-          <div style={styles.legendItem}>
-            <div style={{...styles.legendDot, border:'2px dashed #534AB7', background:'transparent'}}/>
-            <span>Zona verificada</span>
-          </div>
-        </div>
+
+  {/* El mapa y sus overlays SIEMPRE están montados, solo se ocultan con CSS */}
+  <div style={{ display: (activeTab === 'analitica-avanzada' || activeTab === 'reportes-export') ? 'none' : 'block', width:'100%', height:'100%', position:'relative' }}>
+    <div ref={mapRef} style={{ width:'100%', height:'100%' }}/>
+    <PoliceMarkers map={mapInstance.current} />
+
+    {activeTab==='prediccion' && (
+      <div style={styles.predictBanner}>
+        Modo predicción — selecciona fecha, hora y modelo en el panel
       </div>
-      <ReportList reports={reports} map={mapInstance.current}/>
+    )}
+    {loading && <div style={styles.loading}>Actualizando...</div>}
+    <FilterPanel filtros={filtros} onChange={setFiltros} />
+    <div style={styles.hint}>
+      <MousePointerClick size={13} strokeWidth={1.8}/>
+      <span>Doble clic para denunciar</span>
+    </div>
+    {formPos && (
+      <div style={styles.formOverlay}>
+        <ReportForm
+          lat={formPos.lat} lng={formPos.lng}
+          deviceId={deviceId}
+          onCreated={handleReportCreated}
+          onClose={handleClose}
+          onMoveMap={handleMoveMap}
+        />
+      </div>
+    )}
+    <LocateButton map={mapInstance.current} mobile={mobile} />
+    {nearbyList.length > 0 && (
+      <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
+    )}
+    <div style={styles.legend}>
+      {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
+        <div key={tipo} style={styles.legendItem}>
+          <div style={{...styles.legendDot, background:color}}/>
+          <span>{tipo}</span>
+        </div>
+      ))}
+      <div style={styles.legendItem}>
+        <div style={{...styles.legendDot, border:'2px dashed #534AB7', background:'transparent'}}/>
+        <span>Zona verificada</span>
+      </div>
+      <div style={styles.legendItem}>
+        <span style={{ fontSize: 9 }}>⭐</span>
+        <span>Reportante confiable</span>
+      </div>
+    </div>
+  </div>
+
+  {/* El dashboard solo se monta cuando se necesita, esto sí puede montar/desmontar */}
+  {activeTab === 'analitica-avanzada' && (
+    <div style={{ position:'absolute', inset:0, background:'#fff', overflowY:'auto' }}>
+      <AnalyticsDashboard />
+    </div>
+  )}
+  {activeTab === 'reportes-export' && (
+    <div style={{ position:'absolute', inset:0, background:'#fff', overflowY:'auto' }}>
+      <ReportesExport />
+    </div>
+  )}
+</div>
+      <ReportList reports={reportsFiltrados} map={mapInstance.current}/>
+      <PanicButton />
     </div>
   );
 }
@@ -542,6 +629,9 @@ const styles = {
   navItemActive: { background:'#fff0f0', color:'#E24B4A', fontWeight:500 },
   activeDot:     { width:'6px', height:'6px', borderRadius:'50%', background:'#E24B4A', marginLeft:'auto' },
   panelWrapper:  { flex:1, overflowY:'auto', borderTop:'1px solid #eee' },
+  sidebarBottom: { marginTop:'auto', flexShrink:0 },
+  reportesBtn:   { display:'flex', alignItems:'center', gap:'8px', margin:'0 8px', padding:'9px 10px', borderRadius:'8px', cursor:'pointer', fontSize:'13px', color:'#666', borderTop:'1px solid #eee' },
+  reportesBtnActive: { background:'#fff0f0', color:'#E24B4A', fontWeight:500 },
   mapInfo:       { padding:'12px 16px', borderTop:'1px solid #eee', flexShrink:0 },
   mapInfoLabel:  { fontSize:'11px', color:'#aaa' },
   mapInfoCount:  { fontSize:'28px', fontWeight:700, color:'#E24B4A' },

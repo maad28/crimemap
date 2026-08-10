@@ -2,22 +2,43 @@ const express      = require('express');
 const pool         = require('../db/pool');
 const authorityAuth = require('../middleware/authorityAuth');
 const router       = express.Router();
-const { recalcularTodasLasZonas } = require('../services/zonas'); // agregar arriba con los otros require
-
+const { recalcularTodasLasZonas, clasificarNivelRiesgo, DIAS_HISTORIAL_RIESGO, SEMANAS_HISTORIAL_RIESGO, HORAS_DIA_RIESGO } = require('../services/zonas');
+const { ajustarPorAprobacion, ajustarPorRechazo, bloquearManualmente, desbloquearManualmente } = require('../services/reputacion');
 
 router.use(authorityAuth);
+
+const ORDEN_REPORTES = {
+  recientes:           'created_at DESC',
+  antiguos:             'created_at ASC',
+  severidad_desc:       'severidad DESC, created_at DESC',
+  confirmaciones_desc:  'confirmaciones DESC, created_at DESC',
+};
+const ordenReportesSql = (orden) => ORDEN_REPORTES[orden] || ORDEN_REPORTES.recientes;
+
+const ORDEN_ZONAS = {
+  total_desc: 'total_reportes DESC',
+  total_asc:  'total_reportes ASC',
+  recientes:  'primera_deteccion DESC',
+  antiguas:   'primera_deteccion ASC',
+};
+const ordenZonasSql = (orden) => ORDEN_ZONAS[orden] || ORDEN_ZONAS.total_desc;
 
 router.get('/pendientes', async (req, res) => {
   try {
     const page  = parseInt(req.query.page)  || 1;
     const limit = parseInt(req.query.limit) || 12;
     const offset = (page - 1) * limit;
-    const { dias, tipo, severidad_min, orden } = req.query;
+    const { dias, tipo, severidad_min, orden, lat, lng, radio = 1000 } = req.query;
 
     const conditions = [`estado = 'pendiente'`];
     const params = [];
     let i = 1;
 
+    if (lat && lng) {
+      conditions.push(`ST_DWithin(ubicacion, ST_MakePoint($${i + 1},$${i})::geography, $${i + 2})`);
+      params.push(lat, lng, radio);
+      i += 3;
+    }
     if (dias) {
       conditions.push(`created_at > NOW() - INTERVAL '1 day' * $${i}`);
       params.push(parseInt(dias));
@@ -35,20 +56,19 @@ router.get('/pendientes', async (req, res) => {
     }
 
     const where = conditions.join(' AND ');
-    const ordenSql = orden === 'antiguos' ? 'ASC' : 'DESC';
 
     const { rows: [{ count }] } = await pool.query(
       `SELECT COUNT(*) FROM reports WHERE ${where}`, params
     );
 
     const { rows } = await pool.query(`
-      SELECT id, tipo, descripcion, severidad, confirmaciones, estado,
+      SELECT id, tipo, descripcion, severidad, confirmaciones, estado, rol_reportante,
              ST_Y(ubicacion::geometry) AS lat,
              ST_X(ubicacion::geometry) AS lng,
              created_at
       FROM reports
       WHERE ${where}
-      ORDER BY created_at ${ordenSql}
+      ORDER BY ${ordenReportesSql(orden)}
       LIMIT $${i} OFFSET $${i + 1}`,
       [...params, limit, offset]
     );
@@ -60,19 +80,23 @@ router.get('/pendientes', async (req, res) => {
   }
 });
 
-// GET /api/authority/revisados?estado=aprobado,rechazado&page=1&limit=12&dias=30&tipo=..&severidad_min=..&orden=..
 router.get('/revisados', async (req, res) => {
   try {
     const estados = (req.query.estado || 'aprobado,rechazado').split(',');
     const page  = parseInt(req.query.page)  || 1;
     const limit = parseInt(req.query.limit) || 12;
     const offset = (page - 1) * limit;
-    const { dias, tipo, severidad_min, orden } = req.query;
+    const { dias, tipo, severidad_min, orden, lat, lng, radio = 1000 } = req.query;
 
     const conditions = [`estado = ANY($1)`];
     const params = [estados];
     let i = 2;
 
+    if (lat && lng) {
+      conditions.push(`ST_DWithin(ubicacion, ST_MakePoint($${i + 1},$${i})::geography, $${i + 2})`);
+      params.push(lat, lng, radio);
+      i += 3;
+    }
     if (dias) {
       conditions.push(`created_at > NOW() - INTERVAL '1 day' * $${i}`);
       params.push(parseInt(dias));
@@ -90,20 +114,19 @@ router.get('/revisados', async (req, res) => {
     }
 
     const where = conditions.join(' AND ');
-    const ordenSql = orden === 'antiguos' ? 'ASC' : 'DESC';
 
     const { rows: [{ count }] } = await pool.query(
       `SELECT COUNT(*) FROM reports WHERE ${where}`, params
     );
 
     const { rows } = await pool.query(`
-      SELECT id, tipo, descripcion, severidad, confirmaciones, estado,
+      SELECT id, tipo, descripcion, severidad, confirmaciones, estado, rol_reportante,
              ST_Y(ubicacion::geometry) AS lat,
              ST_X(ubicacion::geometry) AS lng,
              created_at
       FROM reports
       WHERE ${where}
-      ORDER BY created_at ${ordenSql}
+      ORDER BY ${ordenReportesSql(orden)}
       LIMIT $${i} OFFSET $${i + 1}`,
       [...params, limit, offset]
     );
@@ -115,15 +138,23 @@ router.get('/revisados', async (req, res) => {
   }
 });
 
-// POST /api/authority/:id/aprobar
+// POST /api/authority/:id/aprobar  (body opcional: { severidad } para ajustarla al aprobar)
 router.post('/:id/aprobar', async (req, res) => {
   try {
+    const severidad = parseInt(req.body?.severidad);
+    const severidadValida = severidad >= 1 && severidad <= 5 ? severidad : null;
+
     const { rows } = await pool.query(
-      `UPDATE reports SET estado = 'aprobado'
-       WHERE id = $1 RETURNING id, estado`,
-      [req.params.id]
+      severidadValida
+        ? `UPDATE reports SET estado = 'aprobado', severidad = $2
+           WHERE id = $1 RETURNING id, estado, severidad, device_hash`
+        : `UPDATE reports SET estado = 'aprobado'
+           WHERE id = $1 RETURNING id, estado, severidad, device_hash`,
+      severidadValida ? [req.params.id, severidadValida] : [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
+
+    await ajustarPorAprobacion(rows[0].device_hash);
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Error al aprobar' });
@@ -135,11 +166,13 @@ router.post('/:id/rechazar', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE reports SET estado = 'rechazado'
-       WHERE id = $1 RETURNING id, estado`,
+       WHERE id = $1 RETURNING id, estado, device_hash`,
       [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
-    res.json(rows[0]);
+
+    const resultado = await ajustarPorRechazo(rows[0].device_hash);
+    res.json({ ...rows[0], reputacion_actualizada: resultado });
   } catch (err) {
     res.status(500).json({ error: 'Error al rechazar' });
   }
@@ -177,7 +210,6 @@ router.post('/:id/revertir', async (req, res) => {
 // GET /api/authority/analitica
 router.get('/analitica', async (req, res) => {
   try {
-    // Total de denuncias por tipo (todas, sin importar estado)
     const { rows: porTipo } = await pool.query(`
       SELECT tipo,
              COUNT(*)                                     AS total,
@@ -189,33 +221,45 @@ router.get('/analitica', async (req, res) => {
       ORDER BY total DESC
     `);
 
-    // Tendencia de denuncias hechas (todas), últimos 30 días
     const { rows: tendencia } = await pool.query(`
       SELECT DATE(created_at) AS fecha,
              COUNT(*) AS total,
-             COUNT(*) FILTER (WHERE tipo = 'Robo')      AS robos,
-             COUNT(*) FILTER (WHERE tipo = 'Asalto')    AS asaltos,
-             COUNT(*) FILTER (WHERE tipo = 'Punto GDO') AS gdo
+             COUNT(*) FILTER (WHERE tipo = 'Robo a persona')       AS robos,
+             COUNT(*) FILTER (WHERE tipo = 'Asalto a mano armada') AS asaltos,
+             COUNT(*) FILTER (WHERE tipo = 'Homicidio')            AS homicidios,
+             COUNT(*) FILTER (WHERE tipo = 'Punto GDO')            AS gdo
       FROM reports
       WHERE created_at > NOW() - INTERVAL '30 days'
       GROUP BY DATE(created_at)
       ORDER BY fecha ASC
     `);
 
-    // Zonas de mayor concentración (todas las denuncias)
-    const { rows: zonas } = await pool.query(`
+    // Misma ventana, mismo criterio ('aprobado') y mismo tipo de riesgo
+    // (severidad acumulada, no conteo) que zonas_concentracion y el modelo
+    // de predicción — ver services/zonas.js.
+    const { rows: zonasRaw } = await pool.query(`
       SELECT
         ROUND(ST_Y(ubicacion::geometry)::numeric, 2) AS lat_zona,
         ROUND(ST_X(ubicacion::geometry)::numeric, 2) AS lng_zona,
         COUNT(*) AS total,
-        AVG(severidad) AS severidad_promedio
+        AVG(severidad) AS severidad_promedio,
+        SUM(severidad) AS riesgo_total
       FROM reports
+      WHERE estado = 'aprobado'
+        AND created_at > NOW() - INTERVAL '${DIAS_HISTORIAL_RIESGO} days'
       GROUP BY lat_zona, lng_zona
-      ORDER BY total DESC
+      ORDER BY riesgo_total DESC
       LIMIT 8
     `);
+    const zonas = zonasRaw.map(z => {
+      const riesgoSemanal = Number(z.riesgo_total) / (SEMANAS_HISTORIAL_RIESGO * HORAS_DIA_RIESGO);
+      return {
+        ...z,
+        riesgo_semanal: Math.round(riesgoSemanal * 100) / 100,
+        nivel_riesgo: clasificarNivelRiesgo(riesgoSemanal),
+      };
+    });
 
-    // Totales generales + tasa de revisión
     const { rows: [totales] } = await pool.query(`
       SELECT COUNT(*) AS total_denuncias,
              COUNT(*) FILTER (WHERE estado = 'pendiente') AS pendientes,
@@ -233,6 +277,44 @@ router.get('/analitica', async (req, res) => {
   }
 });
 
+// POST /api/authority/dispositivos/:hash/bloquear
+router.post('/dispositivos/:hash/bloquear', async (req, res) => {
+  try {
+    await bloquearManualmente(req.params.hash);
+    res.json({ ok: true, device_hash: req.params.hash, bloqueado: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al bloquear dispositivo' });
+  }
+});
+
+// POST /api/authority/dispositivos/:hash/desbloquear
+router.post('/dispositivos/:hash/desbloquear', async (req, res) => {
+  try {
+    await desbloquearManualmente(req.params.hash);
+    res.json({ ok: true, device_hash: req.params.hash, bloqueado: false });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al desbloquear dispositivo' });
+  }
+});
+
+// GET /api/authority/reputacion?bloqueados=true
+router.get('/reputacion', async (req, res) => {
+  try {
+    const soloBloqueados = req.query.bloqueados === 'true';
+    const where = soloBloqueados ? 'WHERE bloqueado = true' : '';
+    const { rows } = await pool.query(`
+      SELECT device_hash, puntos, reportes_totales, reportes_aprobados,
+             reportes_rechazados, bloqueado, primera_actividad
+      FROM reputacion_dispositivo
+      ${where}
+      ORDER BY puntos ASC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener reputación' });
+  }
+});
+
 // GET /api/authority/zonas?estado=pendiente&page=1&limit=12
 router.get('/zonas', async (req, res) => {
   try {
@@ -246,18 +328,39 @@ router.get('/zonas', async (req, res) => {
     );
 
     const { rows } = await pool.query(`
-      SELECT id, radio_metros, total_reportes, tipo_predominante, estado,
-             ST_Y(centro::geometry) AS lat,
-             ST_X(centro::geometry) AS lng,
-             primera_deteccion, ultima_actualizacion
-      FROM zonas_concentracion
-      WHERE estado = $1
-      ORDER BY total_reportes DESC
+      SELECT z.id, z.radio_metros, z.total_reportes, z.tipo_predominante, z.estado,
+             ST_Y(z.centro::geometry) AS lat,
+             ST_X(z.centro::geometry) AS lng,
+             z.primera_deteccion, z.ultima_actualizacion,
+             COALESCE(r.riesgo_total, 0) AS riesgo_total
+      FROM zonas_concentracion z
+      LEFT JOIN LATERAL (
+        SELECT SUM(severidad) AS riesgo_total
+        FROM reports
+        WHERE estado = 'aprobado'
+          AND created_at > NOW() - INTERVAL '${DIAS_HISTORIAL_RIESGO} days'
+          AND ST_DWithin(ubicacion, z.centro, z.radio_metros)
+      ) r ON true
+      WHERE z.estado = $1
+      ORDER BY ${ordenZonasSql(req.query.orden)}
       LIMIT $2 OFFSET $3`, [estado, limit, offset]
     );
 
-    res.json({ data: rows, total: Number(count), page, totalPages: Math.ceil(count / limit) });
+    // Misma fórmula y umbrales que el modelo de predicción (ver services/zonas.js):
+    // riesgo = severidad acumulada / semanas / 24 horas, porque aquí se suman
+    // las 24 horas del día juntas y el modelo predice para una hora puntual.
+    const data = rows.map(z => {
+      const riesgoSemanal = Number(z.riesgo_total) / (SEMANAS_HISTORIAL_RIESGO * HORAS_DIA_RIESGO);
+      return {
+        ...z,
+        riesgo_semanal: Math.round(riesgoSemanal * 100) / 100,
+        nivel_riesgo: clasificarNivelRiesgo(riesgoSemanal),
+      };
+    });
+
+    res.json({ data, total: Number(count), page, totalPages: Math.ceil(count / limit) });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Error al obtener zonas' });
   }
 });
@@ -339,4 +442,90 @@ router.post('/zonas/recalcular', async (req, res) => {
     res.status(500).json({ error: 'Error al recalcular zonas' });
   }
 });
+
+// GET /api/authority/alertas?revisada=false
+router.get('/alertas', async (req, res) => {
+  try {
+    const soloNoRevisadas = req.query.revisada !== 'true';
+    const where = soloNoRevisadas ? 'WHERE revisada = false' : '';
+    const { rows } = await pool.query(`
+      SELECT id, tipo_alerta, detalle, revisada, created_at
+      FROM alertas_sospecha
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT 100
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener alertas' });
+  }
+});
+
+// POST /api/authority/alertas/:id/marcar-revisada
+router.post('/alertas/:id/marcar-revisada', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE alertas_sospecha SET revisada = true
+       WHERE id = $1 RETURNING id, revisada`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'No encontrada' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al marcar alerta' });
+  }
+});
+
+// GET /api/authority/exportar?tab=pendientes&dias=30&tipo=..&severidad_min=..&orden=..
+router.get('/exportar', async (req, res) => {
+  try {
+    const { tab, dias, tipo, severidad_min, orden, lat, lng, radio = 1000 } = req.query;
+
+    const estadoMap = { pendientes: 'pendiente', aprobados: 'aprobado', rechazados: 'rechazado' };
+    const estado = estadoMap[tab] || 'pendiente';
+
+    const conditions = [`estado = $1`];
+    const params = [estado];
+    let i = 2;
+
+    if (lat && lng) {
+      conditions.push(`ST_DWithin(ubicacion, ST_MakePoint($${i + 1},$${i})::geography, $${i + 2})`);
+      params.push(lat, lng, radio);
+      i += 3;
+    }
+    if (dias) {
+      conditions.push(`created_at > NOW() - INTERVAL '1 day' * $${i}`);
+      params.push(parseInt(dias));
+      i++;
+    }
+    if (tipo) {
+      conditions.push(`tipo = ANY($${i})`);
+      params.push(tipo.split(','));
+      i++;
+    }
+    if (severidad_min) {
+      conditions.push(`severidad >= $${i}`);
+      params.push(parseInt(severidad_min));
+      i++;
+    }
+
+    const where = conditions.join(' AND ');
+
+    const { rows } = await pool.query(`
+      SELECT id, tipo, descripcion, severidad, confirmaciones, estado, rol_reportante,
+             ST_Y(ubicacion::geometry) AS lat,
+             ST_X(ubicacion::geometry) AS lng,
+             created_at
+      FROM reports
+      WHERE ${where}
+      ORDER BY ${ordenReportesSql(orden)}
+    `, params);
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al exportar reportes' });
+  }
+});
+
 module.exports = router;
