@@ -1,6 +1,6 @@
 //frontend/src/pages/AutoridadAnalitica.jsx
 import { useState, useEffect } from 'react';
-import { BarChart2, TrendingUp, Map as MapIcon, FileDown, FileText } from 'lucide-react';
+import { BarChart2, TrendingUp, Map, FileDown, FileText } from 'lucide-react';
 import {
   BarChart, Bar, AreaChart, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -221,7 +221,7 @@ export default function AutoridadAnalitica({ secret }) {
         {/* Zonas */}
         <div style={{ ...styles.section, flex: 1 }}>
           <div style={styles.sectionTitle}>
-            <MapIcon size={15} strokeWidth={2} /> Zonas con más riesgo
+            <Map size={15} strokeWidth={2} /> Zonas con más riesgo
           </div>
           <div style={styles.zonaList}>
             {zonas.map((z, i) => {

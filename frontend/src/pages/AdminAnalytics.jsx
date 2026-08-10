@@ -1,6 +1,6 @@
 //Users/mac/crimemap/frontend/src/pages/AdminAnalytics.jsx
 import { useState, useEffect } from 'react';
-import { TrendingUp, Map as MapIcon, CheckCircle, RefreshCw } from 'lucide-react';
+import { TrendingUp, Map, CheckCircle, RefreshCw } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -177,7 +177,7 @@ export default function AdminAnalytics({ secret }) {
         {/* Mapa de densidad */}
         <div style={{...styles.section, flex:1}}>
           <div style={styles.sectionTitle}>
-            <MapIcon size={15} strokeWidth={2} color="#1a1a1a"/> Densidad por zona
+            <Map size={15} strokeWidth={2} color="#1a1a1a"/> Densidad por zona
           </div>
           <div style={styles.sectionSub}>Ranking de zonas urbanas por incidencia</div>
 

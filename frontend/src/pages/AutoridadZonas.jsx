@@ -178,7 +178,6 @@ export default function AutoridadZonas({ secret }) {
                     <Users size={11} /> {z.total_reportes}
                   </span>
                 </div>
-                <p style={{ ...styles.meta, marginTop: 2 }}>Tipo más frecuente de {z.total_reportes} reportes en la zona</p>
 
                 <div style={{ marginTop: 6 }}>
                   <span style={{ ...styles.nivelBadge, ...NIVEL_COLOR[z.nivel_riesgo] }}>
