@@ -267,6 +267,63 @@ export default function AdminMetrics() {
               </div>
             </div>
           </div>
+
+          {data.baseline && (
+            <div style={styles.section}>
+              <div style={styles.sectionTitle}>Comparación contra un baseline ingenuo</div>
+              <div style={styles.sectionSub}>{data.baseline.descripcion}</div>
+              <div style={{ display:'flex', gap:'12px', marginTop:'8px' }}>
+                <div style={{...styles.metricCard, flex:1}}>
+                  <div style={styles.metricLabel}>Baseline (promedio)</div>
+                  <div style={{...styles.metricValue, color:'#aaa'}}>MAE {data.baseline.mae}</div>
+                  <div style={styles.metricDesc}>R² {data.baseline.r2}</div>
+                </div>
+                {data.mejor_modelo && data.metricas[data.mejor_modelo] && (
+                  <div style={{...styles.metricCard, flex:1, background:'#f0eefc'}}>
+                    <div style={styles.metricLabel}>{MODELO_INFO[data.mejor_modelo]?.nombre}</div>
+                    <div style={{...styles.metricValue, color:'#534AB7'}}>MAE {data.metricas[data.mejor_modelo].mae}</div>
+                    <div style={styles.metricDesc}>R² {data.metricas[data.mejor_modelo].r2}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {data.feature_importance && (
+            <div style={styles.section}>
+              <div style={styles.sectionTitle}>Importancia de variables (XGBoost)</div>
+              <div style={styles.sectionSub}>Cuánto aporta cada feature a las predicciones del mejor modelo</div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={data.feature_importance} layout="vertical" margin={{ top:5, right:20, left:10, bottom:5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
+                  <XAxis type="number" tick={{ fontSize:10, fill:'#bbb' }} tickLine={false} axisLine={false}/>
+                  <YAxis type="category" dataKey="feature" width={90} tick={{ fontSize:11, fill:'#555' }} tickLine={false} axisLine={false}/>
+                  <Tooltip content={<CustomTooltip/>}/>
+                  <Bar dataKey="importancia" name="Importancia" fill="#534AB7" radius={[0,4,4,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {data.distribucion_niveles && (
+            <div style={styles.section}>
+              <div style={styles.sectionTitle}>Distribución de niveles de riesgo en los datos</div>
+              <div style={styles.sectionSub}>Balance de clases del target usado para entrenar/evaluar</div>
+              <div style={{ display:'flex', gap:'12px', marginTop:'8px' }}>
+                {[
+                  { nivel:'ALTO',  color:'#E24B4A' },
+                  { nivel:'MEDIO', color:'#BA7517' },
+                  { nivel:'BAJO',  color:'#1D9E75' },
+                ].map(n => (
+                  <div key={n.nivel} style={{...styles.metricCard, flex:1}}>
+                    <div style={styles.metricLabel}>{n.nivel}</div>
+                    <div style={{...styles.metricValue, color:n.color}}>{data.distribucion_niveles[n.nivel]}</div>
+                    <div style={styles.metricDesc}>celdas-hora</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

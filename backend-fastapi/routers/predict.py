@@ -219,13 +219,13 @@ def entrenar():
     El target es la severidad acumulada por semana (riesgo ≈ frecuencia ×
     severidad, "daño esperado"), no la cantidad de reportes — una zona con
     10 vandalismos ya no pesa más que una con 2 homicidios. Se agrupa por
-    celda espacio-temporal (lat/lng redondeado a ~1.1km, hora del día) sobre
+    celda espacio-temporal (lat/lng redondeado a 1.1km, hora del día) sobre
     los últimos DIAS_HISTORIAL días, y se divide entre las semanas de esa
     ventana para que el número sea una TASA comparable, no un total crudo que
     crece solo porque pasó más tiempo.
 
     Mismos umbrales fijos (ALTO/MEDIO) y misma unidad (severidad/semana) que
-    zonas_concentracion y el ranking de Analítica en backend-express — así
+    zonas_concentracion y el ranking de Analítica en backend-express  así
     "riesgo alto" significa lo mismo lo mires desde donde lo mires, ya sea
     observado (zonas reales) o predicho (este modelo).
 
@@ -313,6 +313,7 @@ def get_metrics():
     from xgboost import XGBRegressor
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.neighbors import KNeighborsRegressor
+    from sklearn.dummy import DummyRegressor
     from sklearn.model_selection import cross_val_score, KFold
     from sklearn.metrics import mean_absolute_error, mean_squared_error
     import numpy as np
@@ -359,6 +360,28 @@ def get_metrics():
 
     kf      = KFold(n_splits=5, shuffle=True, random_state=42)
     results = {}
+    feature_importance = None
+
+    # --- Baseline ingenuo: predecir siempre el promedio, sin usar ninguna
+    # variable. Si un modelo no le gana por mucho a esto, el problema tiene
+    # poca estructura que aprender o el modelo no está aportando valor real.
+    baseline_mae  = -cross_val_score(DummyRegressor(strategy="mean"), X, y, cv=kf, scoring="neg_mean_absolute_error")
+    baseline_rmse = np.sqrt(-cross_val_score(DummyRegressor(strategy="mean"), X, y, cv=kf, scoring="neg_mean_squared_error"))
+    baseline_r2   =  cross_val_score(DummyRegressor(strategy="mean"), X, y, cv=kf, scoring="r2")
+    baseline = {
+        "mae":  round(float(baseline_mae.mean()),  4),
+        "rmse": round(float(baseline_rmse.mean()), 4),
+        "r2":   round(float(baseline_r2.mean()),   4),
+        "descripcion": "Predictor ingenuo (DummyRegressor de sklearn): siempre predice el promedio de riesgo observado, sin usar hora/día/mes/lat/lng.",
+    }
+
+    # --- Balance de clases en el target real, ANTES de que cualquier modelo
+    # prediga nada. Si casi todo cae en BAJO, un MAE/R² global bueno puede
+    # esconder que el modelo predice mal justo en los casos ALTO/MEDIO, que
+    # son los que realmente importan para el sistema.
+    niveles_reales = pd.Series(y).apply(clasificar_nivel)
+    conteo = niveles_reales.value_counts().to_dict()
+    distribucion_niveles = {nivel: int(conteo.get(nivel, 0)) for nivel in ["ALTO", "MEDIO", "BAJO"]}
 
     for nombre, modelo in modelos.items():
         path = os.path.join(MODELS_DIR, AVAILABLE_MODELS[nombre])
@@ -384,6 +407,13 @@ def get_metrics():
         modelo.fit(X, y)
         y_pred = modelo.predict(X)
 
+        # XGBoost trae la importancia de cada feature gratis tras el fit —
+        # sirve para confirmar (o refutar) con evidencia si dia_semana/mes
+        # realmente le aportan algo al modelo o son ruido.
+        if nombre == "xgboost" and hasattr(modelo, "feature_importances_"):
+            pares = sorted(zip(feats, modelo.feature_importances_.tolist()), key=lambda p: p[1], reverse=True)
+            feature_importance = [{"feature": f, "importancia": round(float(i), 4)} for f, i in pares]
+
         results[nombre] = {
             "mae":       round(float(mae_scores.mean()),  4),
             "mae_std":   round(float(mae_scores.std()),   4),
@@ -404,4 +434,7 @@ def get_metrics():
         "metricas":  results,
         "ranking":   [{"modelo": k, "mae": v["mae"], "r2": v["r2"]} for k, v in ranking],
         "mejor_modelo": ranking[0][0] if ranking else None,
+        "baseline": baseline,
+        "distribucion_niveles": distribucion_niveles,
+        "feature_importance": feature_importance,
     }
