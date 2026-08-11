@@ -239,6 +239,12 @@ const updateMarkers = (data) => {
     const color  = TIPO_COLORS[r.tipo] || '#888';
     const esPend = r.estado === 'pendiente';
     const esConfiable = r.reputacion_puntos >= 130;
+    // "Verificado" tiene dos fuentes independientes que no se mezclan con el
+    // estado de moderación: 5+ confirmaciones de otros ciudadanos es una señal
+    // social, distinta de que la Autoridad haya aprobado el reporte. Ninguna
+    // reemplaza a la otra — solo se muestran juntas si coinciden.
+    const verifCiudadania = r.confirmaciones >= 5;
+    const verifAutoridad  = r.estado === 'aprobado';
 
     const icon   = L.divIcon({
       className:'',
@@ -247,13 +253,24 @@ const updateMarkers = (data) => {
         box-shadow:0 1px 3px rgba(0,0,0,.4)">
         ${esPend ? '<div style="position:absolute;top:-4px;right:-4px;font-size:9px;">⏳</div>' : ''}
         ${esConfiable ? '<div style="position:absolute;top:-5px;left:-5px;font-size:10px;">⭐</div>' : ''}
+        ${verifCiudadania ? `<div style="position:absolute;bottom:-5px;right:-5px;font-size:10px;">${verifAutoridad ? '🛡️' : '👥'}</div>` : ''}
       </div>`,
       iconSize:[12,12], iconAnchor:[6,6],
     });
+
+    let estadoTexto;
+    if (verifAutoridad && verifCiudadania) {
+      estadoTexto = '<span style="color:#1D9E75;font-size:11px;">🛡️ Verificado por Autoridad y ciudadanía</span>';
+    } else if (verifAutoridad) {
+      estadoTexto = '<span style="color:#1D9E75;font-size:11px;">✓ Verificado por Autoridad</span>';
+    } else if (verifCiudadania) {
+      estadoTexto = '<span style="color:#534AB7;font-size:11px;">👥 Verificado por ciudadanía</span>';
+    } else {
+      estadoTexto = '<span style="color:#BA7517;font-size:11px;">(pendiente de revisión)</span>';
+    }
+
     const marker = L.marker([r.lat,r.lng],{icon}).bindPopup(`
-      <b>${r.tipo}</b> ${esPend
-        ? '<span style="color:#BA7517;font-size:11px;">(pendiente de revisión)</span>'
-        : '<span style="color:#1D9E75;font-size:11px;">✓ verificado</span>'}<br>
+      <b>${r.tipo}</b> ${estadoTexto}<br>
       ${esConfiable ? '<span style="color:#EF9F27;font-size:11px;">⭐ Reportante confiable</span><br>' : ''}
       ${r.descripcion||'<i>Sin descripción</i>'}<br>
       <small>${r.confirmaciones} confirmaciones</small>
@@ -373,6 +390,30 @@ const updateMarkers = (data) => {
             ))}
           </select>
         )}
+
+        <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0' }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'#888', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:10 }}>
+            Nivel de riesgo
+          </div>
+          {[
+            { nivel:'ALTO',  color:'#E24B4A', rango:'≥ 40 pts/semana',   desc:'Severidad alta y sostenida en los últimos 180 días.' },
+            { nivel:'MEDIO', color:'#BA7517', rango:'10–39 pts/semana', desc:'Presencia moderada de reportes graves.' },
+            { nivel:'BAJO',  color:'#1D9E75', rango:'< 10 pts/semana',  desc:'Baja concentración o sin reportes recientes.' },
+          ].map(n => (
+            <div key={n.nivel} style={{ display:'flex', gap:10, alignItems:'flex-start', marginBottom:10 }}>
+              <div style={{ width:12, height:12, borderRadius:4, background:n.color, flexShrink:0, marginTop:2 }}/>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:'#1a1a1a' }}>
+                  {n.nivel} <span style={{ fontWeight:400, color:'#aaa' }}>({n.rango})</span>
+                </div>
+                <div style={{ fontSize:11, color:'#888', marginTop:1 }}>{n.desc}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize:10, color:'#bbb', marginTop:6, lineHeight:1.4 }}>
+            Riesgo = severidad acumulada de reportes aprobados (180 días) ÷ semanas de historial.
+          </div>
+        </div>
       </div>
     );
 
@@ -490,6 +531,15 @@ const updateMarkers = (data) => {
 
         {/* Leyenda */}
         <div style={mStyles.legend}>
+          {showHeat && (
+            <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #eee' }}>
+              <div style={{ height: 6, borderRadius: 3, background: 'linear-gradient(to right, rgba(239,159,39,0), #F4C542, #EF9F27, #BA7517, #E24B4A)' }}/>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: '#aaa', marginTop: 2 }}>
+                <span>Menos reportes</span>
+                <span>Más reportes</span>
+              </div>
+            </div>
+          )}
           {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
             <div key={tipo} style={mStyles.legendItem}>
               <div style={{width:8,height:8,borderRadius:'50%',background:color,flexShrink:0}}/>
@@ -503,6 +553,14 @@ const updateMarkers = (data) => {
           <div style={mStyles.legendItem}> {/* o styles.legendItem en desktop */}
             <span style={{ fontSize: 9 }}>⭐</span>
             <span>Reportante confiable</span>
+          </div>
+          <div style={mStyles.legendItem}>
+            <span style={{ fontSize: 9 }}>👥</span>
+            <span>Verificado por ciudadanía (5+ confirmaron)</span>
+          </div>
+          <div style={mStyles.legendItem}>
+            <span style={{ fontSize: 9 }}>🛡️</span>
+            <span>Verificado por Autoridad y ciudadanía</span>
           </div>
         </div>
 
@@ -626,6 +684,15 @@ const updateMarkers = (data) => {
       <SubmitSuccessToast onDismiss={() => setShowSubmitSuccess(false)} />
     )}
     <div style={styles.legend}>
+      {showHeat && (
+        <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #eee' }}>
+          <div style={{ height: 7, borderRadius: 4, background: 'linear-gradient(to right, rgba(239,159,39,0), #F4C542, #EF9F27, #BA7517, #E24B4A)' }}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#aaa', marginTop: 3 }}>
+            <span>Menos reportes</span>
+            <span>Más reportes</span>
+          </div>
+        </div>
+      )}
       {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
         <div key={tipo} style={styles.legendItem}>
           <div style={{...styles.legendDot, background:color}}/>
@@ -639,6 +706,14 @@ const updateMarkers = (data) => {
       <div style={styles.legendItem}>
         <span style={{ fontSize: 9 }}>⭐</span>
         <span>Reportante confiable</span>
+      </div>
+      <div style={styles.legendItem}>
+        <span style={{ fontSize: 9 }}>👥</span>
+        <span>Verificado por ciudadanía (5+ confirmaron)</span>
+      </div>
+      <div style={styles.legendItem}>
+        <span style={{ fontSize: 9 }}>🛡️</span>
+        <span>Verificado por Autoridad y ciudadanía</span>
       </div>
     </div>
   </div>
