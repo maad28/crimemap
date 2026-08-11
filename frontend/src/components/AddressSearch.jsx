@@ -79,7 +79,7 @@ export default function AddressSearch({ map, mobile, onResult }) {
 const styles = {
   wrapper:        { position: 'absolute', zIndex: 1000 },
   wrapperDesktop: { top: 16, left: 50, width: 300 },
-  wrapperMobile:  { top: 64, left: 12, right: 64 },
+  wrapperMobile:  { top: 64, left: 50, right: 64, width: 300 },
   form:           { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 20, padding: '9px 14px', boxShadow: '0 2px 10px rgba(0,0,0,.15)' },
   input:          { flex: 1, border: 'none', outline: 'none', fontSize: 13, color: '#333', minWidth: 0, background: 'transparent' },
   clearBtn:       { display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0 },

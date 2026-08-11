@@ -33,7 +33,7 @@ export default function LocateButton({ map, mobile }) {
 
 const styles = {
   btn: {
-    position: 'absolute', right: 12, zIndex: 1000,
+    position: 'absolute', right: 24, zIndex: 1000,
     width: 42, height: 42, borderRadius: '50%',
     background: '#fff', border: '1px solid #eee',
     boxShadow: '0 2px 10px rgba(0,0,0,.15)',

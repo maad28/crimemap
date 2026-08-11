@@ -97,7 +97,7 @@ export default function FilterPanel({ filtros, onChange }) {
 }
 
 const styles = {
-  fab:    { position: 'absolute', top: 16, right: 16, zIndex: 1000, background: '#1a1a1a', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,.2)' },
+  fab:    { position: 'absolute',  right: 5, zIndex: 1000, background: '#1a1a1a', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,.2)' },
   panel:  { position: 'absolute', top: 16, right: 16, zIndex: 1000, background: '#fff', borderRadius: 14, padding: 16, width: 240, boxShadow: '0 4px 20px rgba(0,0,0,.15)' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer' },
