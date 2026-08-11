@@ -324,6 +324,50 @@ export default function AdminMetrics() {
               </div>
             </div>
           )}
+
+          {data.matriz_confusion && (() => {
+            const { labels, matriz } = data.matriz_confusion;
+            const total   = matriz.flat().reduce((a,b) => a+b, 0);
+            const aciertos = matriz.reduce((a, row, i) => a + row[i], 0);
+            const NIVEL_COLOR = { ALTO:'#E24B4A', MEDIO:'#BA7517', BAJO:'#1D9E75' };
+            return (
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Matriz de confusión — {MODELO_INFO[data.matriz_confusion.modelo]?.nombre}</div>
+                <div style={styles.sectionSub}>
+                  {data.matriz_confusion.descripcion} · Predicciones out-of-fold (cross-validation), no vistas en el fit final.
+                </div>
+                <div style={{ overflowX:'auto', marginTop:'12px' }}>
+                  <table style={{ ...styles.table, minWidth:380 }}>
+                    <thead>
+                      <tr style={styles.thead}>
+                        <th style={styles.th}></th>
+                        {labels.map(l => (
+                          <th key={l} style={{...styles.th, textAlign:'center', color:NIVEL_COLOR[l]}}>Predicho {l}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {labels.map((realLabel, i) => (
+                        <tr key={realLabel} style={styles.tr}>
+                          <td style={{...styles.td, fontWeight:700, color:NIVEL_COLOR[realLabel]}}>Real {realLabel}</td>
+                          {matriz[i].map((val, j) => (
+                            <td key={j} style={{
+                              ...styles.td, textAlign:'center', fontWeight: i===j ? 700 : 400,
+                              background: i===j ? '#eafaf3' : 'transparent',
+                              color: i===j ? '#1D9E75' : '#888',
+                            }}>{val}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ fontSize:12, color:'#888', marginTop:10 }}>
+                  Exactitud global: <b style={{ color:'#1a1a1a' }}>{Math.round(aciertos/total*1000)/10}%</b> ({aciertos} de {total} celdas-hora clasificadas en el nivel correcto)
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

@@ -314,8 +314,8 @@ def get_metrics():
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.neighbors import KNeighborsRegressor
     from sklearn.dummy import DummyRegressor
-    from sklearn.model_selection import cross_val_score, KFold
-    from sklearn.metrics import mean_absolute_error, mean_squared_error
+    from sklearn.model_selection import cross_val_score, cross_val_predict, KFold
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, confusion_matrix
     import numpy as np
     import pandas as pd
 
@@ -361,6 +361,7 @@ def get_metrics():
     kf      = KFold(n_splits=5, shuffle=True, random_state=42)
     results = {}
     feature_importance = None
+    matriz_confusion = None
 
     # --- Baseline ingenuo: predecir siempre el promedio, sin usar ninguna
     # variable. Si un modelo no le gana por mucho a esto, el problema tiene
@@ -414,6 +415,22 @@ def get_metrics():
             pares = sorted(zip(feats, modelo.feature_importances_.tolist()), key=lambda p: p[1], reverse=True)
             feature_importance = [{"feature": f, "importancia": round(float(i), 4)} for f, i in pares]
 
+            # Matriz de confusión ALTO/MEDIO/BAJO del mejor modelo, usando
+            # predicciones out-of-fold (cross_val_predict) para no medir
+            # sobre datos que el modelo ya vio en el fit de arriba — si no,
+            # la matriz saldría artificialmente casi perfecta.
+            y_pred_oof   = cross_val_predict(modelo, X, y, cv=kf)
+            niveles_pred = [clasificar_nivel(max(0, v)) for v in y_pred_oof]
+            niveles_real = [clasificar_nivel(v) for v in y]
+            orden = ["ALTO", "MEDIO", "BAJO"]
+            cm = confusion_matrix(niveles_real, niveles_pred, labels=orden)
+            matriz_confusion = {
+                "modelo": nombre,
+                "labels": orden,
+                "matriz": cm.tolist(),
+                "descripcion": "Filas = nivel real, columnas = nivel predicho. Diagonal = aciertos.",
+            }
+
         results[nombre] = {
             "mae":       round(float(mae_scores.mean()),  4),
             "mae_std":   round(float(mae_scores.std()),   4),
@@ -437,4 +454,5 @@ def get_metrics():
         "baseline": baseline,
         "distribucion_niveles": distribucion_niveles,
         "feature_importance": feature_importance,
+        "matriz_confusion": matriz_confusion,
     }
