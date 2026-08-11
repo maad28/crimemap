@@ -2,7 +2,7 @@ const express      = require('express');
 const pool         = require('../db/pool');
 const authorityAuth = require('../middleware/authorityAuth');
 const router       = express.Router();
-const { recalcularTodasLasZonas, clasificarNivelRiesgo, DIAS_HISTORIAL_RIESGO, SEMANAS_HISTORIAL_RIESGO, HORAS_DIA_RIESGO } = require('../services/zonas');
+const { recalcularTodasLasZonas, clasificarNivelRiesgo, DIAS_HISTORIAL_RIESGO, SEMANAS_HISTORIAL_RIESGO } = require('../services/zonas');
 const { ajustarPorAprobacion, ajustarPorRechazo, bloquearManualmente, desbloquearManualmente } = require('../services/reputacion');
 
 router.use(authorityAuth);
@@ -252,7 +252,7 @@ router.get('/analitica', async (req, res) => {
       LIMIT 8
     `);
     const zonas = zonasRaw.map(z => {
-      const riesgoSemanal = Number(z.riesgo_total) / (SEMANAS_HISTORIAL_RIESGO * HORAS_DIA_RIESGO);
+      const riesgoSemanal = Number(z.riesgo_total) / SEMANAS_HISTORIAL_RIESGO;
       return {
         ...z,
         riesgo_semanal: Math.round(riesgoSemanal * 100) / 100,
@@ -350,7 +350,7 @@ router.get('/zonas', async (req, res) => {
     // riesgo = severidad acumulada / semanas / 24 horas, porque aquí se suman
     // las 24 horas del día juntas y el modelo predice para una hora puntual.
     const data = rows.map(z => {
-      const riesgoSemanal = Number(z.riesgo_total) / (SEMANAS_HISTORIAL_RIESGO * HORAS_DIA_RIESGO);
+      const riesgoSemanal = Number(z.riesgo_total) / SEMANAS_HISTORIAL_RIESGO;
       return {
         ...z,
         riesgo_semanal: Math.round(riesgoSemanal * 100) / 100,

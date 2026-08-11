@@ -5,15 +5,16 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown } from 'lucide-react';import ReportForm      from './ReportForm';
+import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown, MapPinned } from 'lucide-react';import ReportForm      from './ReportForm';
 import ReportList      from './ReportList';
 import ConfirmToast    from './ConfirmToast';
 import PredictPanel    from './PredictPanel';
 import AnalyticaPanel  from './AnalyticaPanel';
 import HistorialPanel  from './HistorialPanel';
 import FilterPanel     from './FilterPanel';
+import AddressSearch   from './AddressSearch';
 import { useDeviceId } from '../hooks/useDeviceId';
-import { getReports, getHeatmap, getNearby, getZonasVerificadas } from '../api/reports';
+import { getReports, getHeatmap, getNearby, getZonasVerificadas, getZonasFijas } from '../api/reports';
 import PanicButton from './PanicButton';
 import ProximityAlert from './ProximityAlert';
 import LocateButton from './LocateButton';
@@ -22,6 +23,7 @@ import SafeRoutePanel from './SafeRoutePanel';
 import { Link } from 'react-router-dom';
 import AnalyticsDashboard from '../pages/AnalyticsDashboard';
 import ReportesExport from '../pages/ReportesExport';
+import ZoneDetailModal from './ZoneDetailModal';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -57,6 +59,9 @@ export default function MapView() {
   const [reports,      setReports]      = useState([]);
   const [formPos,      setFormPos]      = useState(null);
   const [nearbyList,   setNearbyList]   = useState([]);
+  const [zonasVerificadas, setZonasVerificadas] = useState([]);
+  const [zonasFijas, setZonasFijas] = useState([]);
+  const [zonaSeleccionada, setZonaSeleccionada] = useState(null);
   const [showHeat,     setShowHeat]     = useState(true);
   const [showCluster,  setShowCluster]  = useState(true);
   const [activeTab,    setActiveTab]    = useState('mapa');
@@ -118,6 +123,10 @@ export default function MapView() {
     loadZonasVerificadas(map);
   }, []);
 
+  useEffect(() => {
+    getZonasFijas().then(setZonasFijas).catch(e => console.error(e));
+  }, []);
+
   // Verificar denuncias cercanas al cargar
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -148,6 +157,7 @@ export default function MapView() {
   const loadZonasVerificadas = async (map) => {
     try {
       const zonas = await getZonasVerificadas();
+      setZonasVerificadas(zonas);
       zonaLayers.current.forEach(l => l.remove());
       zonaLayers.current = [];
 
@@ -177,6 +187,16 @@ export default function MapView() {
     mapInstance.current.setView([lat,lng], 16);
     placeFormMarker(mapInstance.current, lat, lng);
     setFormPos({ lat, lng });
+    setMobilePanel(null);
+  };
+
+  const handleZonaSelect = (nombre) => {
+    const zona = zonasFijas.find(z => z.nombre === nombre);
+    if (!zona) return;
+    if (mapInstance.current) {
+      try { mapInstance.current.setView([zona.lat, zona.lng], 16); } catch (e) { console.error(e); }
+    }
+    setZonaSeleccionada(zona);
     setMobilePanel(null);
   };
 
@@ -244,6 +264,11 @@ const updateMarkers = (data) => {
     const { points } = await getHeatmap();
     if (!points.length) return;
     await import('leaflet.heat');
+    // El contenedor puede seguir sin tamaño real justo después de crearse el mapa
+    // (sobre todo la primera carga); sin esto, leaflet.heat dibuja sobre un canvas
+    // de ancho 0 y lanza un IndexSizeError.
+    map.invalidateSize();
+    if (map.getSize().x === 0 || map.getSize().y === 0) return;
     if (heatLayer.current) heatLayer.current.remove();
     heatLayer.current = L.heatLayer(points,{
       radius: 45,
@@ -326,6 +351,27 @@ const updateMarkers = (data) => {
     if (activeTab==='historial')  return <HistorialPanel map={mapInstance.current}/>;
     if (activeTab==='ruta')       return <SafeRoutePanel map={mapInstance.current}/>;
     if (activeTab==='reportes-export') return <ReportesExport/>;
+    if (activeTab==='zonas') return (
+      <div style={{ padding: 14 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#1a1a1a', marginBottom:10 }}>Zonas de Guayaquil</div>
+        {zonasFijas.length === 0 ? (
+          <div style={{ fontSize:12, color:'#aaa' }}>Cargando zonas...</div>
+        ) : (
+          <select
+            style={{ width:'100%', padding:'9px 10px', borderRadius:8, border:'1px solid #eee', fontSize:13, background:'#fff' }}
+            value={zonaSeleccionada?.nombre || ''}
+            onChange={e => handleZonaSelect(e.target.value)}
+          >
+            <option value="" disabled>Selecciona una zona...</option>
+            {zonasFijas.map(z => (
+              <option key={z.nombre} value={z.nombre}>
+                {z.nombre} · {z.nivel_riesgo}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    );
 
     return null;
   };
@@ -355,6 +401,8 @@ const updateMarkers = (data) => {
           <FilterPanel filtros={filtros} onChange={setFiltros} />
         </div>
 
+        <AddressSearch map={mapInstance.current} mobile />
+
         {loading && <div style={mStyles.loading}>Actualizando...</div>}
 
         {/* Toast de confirmación */}
@@ -364,6 +412,9 @@ const updateMarkers = (data) => {
         <ProximityAlert />
         <LocateButton map={mapInstance.current} mobile={mobile} />
         <PanicButton mobile={mobile} />
+        {zonaSeleccionada && (
+          <ZoneDetailModal zona={zonaSeleccionada} onClose={() => setZonaSeleccionada(null)} />
+        )}
 
         {/* Formulario de denuncia */}
         {formPos && (
@@ -401,6 +452,7 @@ const updateMarkers = (data) => {
                     { id:'prediccion', label:'Predicción', Icon:Clock      },
                     { id:'historial',  label:'Historial',  Icon:History    },
                     { id:'ruta',       label:'Ruta segura',  Icon:Route     }, // ← agregar esta línea
+                    { id:'zonas',      label:'Zonas',        Icon:MapPinned },
                     { id:'analitica-avanzada',label:'Analítica avanzada', Icon:TrendingUp },
                     { id:'reportes-export',label:'Reportes', Icon:FileDown },
 
@@ -481,7 +533,8 @@ const updateMarkers = (data) => {
             { id:'analitica',  label:'Analítica',    Icon:BarChart2  },
             { id:'prediccion', label:'Predicción',   Icon:Clock     },
             { id:'historial',  label:'Historial',    Icon:History   },
-            { id:'ruta',       label:'Ruta segura',  Icon:Route     }, 
+            { id:'ruta',       label:'Ruta segura',  Icon:Route     },
+            { id:'zonas',      label:'Zonas',        Icon:MapPinned },
             { id:'analitica-avanzada',label:'Analítica avanzada', Icon:TrendingUp },
 
 
@@ -543,6 +596,7 @@ const updateMarkers = (data) => {
     )}
     {loading && <div style={styles.loading}>Actualizando...</div>}
     <FilterPanel filtros={filtros} onChange={setFiltros} />
+    <AddressSearch map={mapInstance.current} />
     <div style={styles.hint}>
       <MousePointerClick size={13} strokeWidth={1.8}/>
       <span>Doble clic para denunciar</span>
@@ -594,6 +648,9 @@ const updateMarkers = (data) => {
 </div>
       <ReportList reports={reportsFiltrados} map={mapInstance.current}/>
       <PanicButton />
+      {zonaSeleccionada && (
+        <ZoneDetailModal zona={zonaSeleccionada} onClose={() => setZonaSeleccionada(null)} />
+      )}
     </div>
   );
 }

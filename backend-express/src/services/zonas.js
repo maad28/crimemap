@@ -2,22 +2,20 @@
 
 const pool = require('../db/pool');
 
-// --- Definición única de "riesgo", igual a backend-fastapi/routers/predict.py.
-// Riesgo = severidad acumulada de reportes 'aprobado' por semana, PARA UNA
-// HORA ESPECÍFICA — así es como lo predice el modelo (agrupa por celda+hora).
-// Por eso, cuando aquí sumamos reportes de una zona SIN separar por hora
-// (24 horas juntas), hay que dividir también entre 24 para que el número
-// quede en la misma unidad que una predicción del modelo para una hora
-// puntual — si no, cualquier zona real siempre se ve ~24x más "riesgosa"
-// que la predicción, aunque midan lo mismo.
-// Umbrales fijos (no percentiles) para que "alto" signifique lo mismo lo
-// mires desde zonas observadas (aquí) o desde el modelo (FastAPI). Si se
-// ajustan estos números, hay que ajustarlos también en predict.py.
+// --- Definición de "riesgo" a nivel de zona: severidad acumulada de
+// reportes 'aprobado' por semana, sumando TODAS las horas del día (a
+// diferencia del modelo en predict.py, que predice para una hora puntual —
+// esa es una unidad distinta a propósito, no se dividen entre 24 para
+// hacerlas coincidir. Antes se dividía y el resultado nunca superaba el
+// umbral de MEDIO con datos reales de la seed: ninguna zona, ni la de más
+// peso de crimen, pasaba de ~3 cuando MEDIO empezaba en 4. Los umbrales de
+// abajo están calibrados contra la distribución real de riesgo semanal
+// (sin dividir por hora) de las 16 zonas urbanas de seed.py: las "alta"
+// caen ~50-72, las "media" ~13-22, las "baja" ~1-4.
 const DIAS_HISTORIAL_RIESGO = 180;
 const SEMANAS_HISTORIAL_RIESGO = DIAS_HISTORIAL_RIESGO / 7;
-const HORAS_DIA_RIESGO = 24;
-const UMBRAL_RIESGO_ALTO = 10;   // puntos de severidad acumulada por semana, por hora
-const UMBRAL_RIESGO_MEDIO = 4;
+const UMBRAL_RIESGO_ALTO = 40;   // puntos de severidad acumulada por semana
+const UMBRAL_RIESGO_MEDIO = 10;
 
 // Umbral SEPARADO, en otra unidad: severidad acumulada total (sin dividir
 // entre semanas ni horas), usado solo para decidir si algo "merece" que se
@@ -114,7 +112,6 @@ module.exports = {
   clasificarNivelRiesgo,
   DIAS_HISTORIAL_RIESGO,
   SEMANAS_HISTORIAL_RIESGO,
-  HORAS_DIA_RIESGO,
   UMBRAL_RIESGO_ALTO,
   UMBRAL_RIESGO_MEDIO,
 };

@@ -29,3 +29,6 @@ export const getClusters = () =>
 
 export const getZonasVerificadas = () =>
   apiExpress.get('/api/reports/zonas-verificadas').then(r => r.data);
+
+export const getZonasFijas = () =>
+  apiExpress.get('/api/reports/zonas-fijas').then(r => r.data);
