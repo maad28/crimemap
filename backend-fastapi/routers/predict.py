@@ -367,6 +367,14 @@ def get_metrics():
 
         with open(path, "rb") as f:
             modelo = pickle.load(f)
+        # RandomForest se guardó con n_jobs=-1 (todos los núcleos). En un
+        # contenedor con RAM/CPU muy limitada (como el free tier de Render)
+        # eso dispara varios procesos worker a la vez y puede tumbar el
+        # servicio por falta de memoria. Forzar 1 solo hilo aquí es más
+        # lento pero no cambia el resultado — el número de hilos no afecta
+        # las métricas, solo la velocidad.
+        if hasattr(modelo, "n_jobs"):
+            modelo.n_jobs = 1
 
         mae_scores  = -cross_val_score(modelo, X, y, cv=kf, scoring='neg_mean_absolute_error')
         rmse_scores = np.sqrt(-cross_val_score(modelo, X, y, cv=kf, scoring='neg_mean_squared_error'))
