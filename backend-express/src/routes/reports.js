@@ -13,7 +13,12 @@ const SEVERIDAD_MINIMA_POR_TIPO = {
   'Extorsión': 4,
   'Asalto a mano armada': 3,
 };
-const { detectarZona } = require('../services/zonas');
+const {
+  detectarZona,
+  clasificarNivelRiesgo,
+  SEMANAS_HISTORIAL_RIESGO,
+  DIAS_HISTORIAL_RIESGO,
+} = require('../services/zonas');
 const {
   registrarNuevoReporte,
   estaBloqueado,
@@ -170,19 +175,170 @@ router.post('/:id/confirm', async (req, res) => {
 router.get('/zonas-verificadas', async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT id, radio_metros, total_reportes, tipo_predominante,
-             ST_Y(centro::geometry) AS lat,
-             ST_X(centro::geometry) AS lng,
-             ultima_actualizacion
-      FROM zonas_concentracion
-      WHERE estado = 'verificada'
-      ORDER BY total_reportes DESC
+      SELECT z.id, z.radio_metros, z.total_reportes, z.tipo_predominante,
+             ST_Y(z.centro::geometry) AS lat,
+             ST_X(z.centro::geometry) AS lng,
+             z.ultima_actualizacion,
+             COALESCE(riesgo.riesgo_total, 0) AS riesgo_total,
+             COALESCE(sem_actual.total, 0)    AS reportes_7dias,
+             COALESCE(sem_anterior.total, 0)  AS reportes_7dias_anterior,
+             COALESCE(hoy.total, 0)           AS reportes_hoy,
+             COALESCE(top_tipos.tipos, '[]')  AS principales_categorias
+      FROM zonas_concentracion z
+      LEFT JOIN LATERAL (
+        SELECT SUM(severidad) AS riesgo_total
+        FROM reports
+        WHERE estado = 'aprobado'
+          AND created_at > NOW() - INTERVAL '${DIAS_HISTORIAL_RIESGO} days'
+          AND ST_DWithin(ubicacion, z.centro, z.radio_metros)
+      ) riesgo ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS total
+        FROM reports
+        WHERE estado != 'rechazado'
+          AND created_at > NOW() - INTERVAL '7 days'
+          AND ST_DWithin(ubicacion, z.centro, z.radio_metros)
+      ) sem_actual ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS total
+        FROM reports
+        WHERE estado != 'rechazado'
+          AND created_at > NOW() - INTERVAL '14 days'
+          AND created_at <= NOW() - INTERVAL '7 days'
+          AND ST_DWithin(ubicacion, z.centro, z.radio_metros)
+      ) sem_anterior ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS total
+        FROM reports
+        WHERE estado != 'rechazado'
+          AND created_at >= CURRENT_DATE
+          AND ST_DWithin(ubicacion, z.centro, z.radio_metros)
+      ) hoy ON true
+      LEFT JOIN LATERAL (
+        SELECT json_agg(tipo) AS tipos FROM (
+          SELECT tipo, COUNT(*) AS n
+          FROM reports
+          WHERE estado != 'rechazado'
+            AND created_at > NOW() - INTERVAL '${DIAS_HISTORIAL_RIESGO} days'
+            AND ST_DWithin(ubicacion, z.centro, z.radio_metros)
+          GROUP BY tipo
+          ORDER BY n DESC
+          LIMIT 3
+        ) t
+      ) top_tipos ON true
+      WHERE z.estado = 'verificada'
+      ORDER BY z.total_reportes DESC
     `);
-    res.json(rows);
+
+    const data = rows.map(z => {
+      const riesgoSemanal = Number(z.riesgo_total) / SEMANAS_HISTORIAL_RIESGO;
+      const actual   = Number(z.reportes_7dias);
+      const anterior = Number(z.reportes_7dias_anterior);
+      const tendencia = actual > anterior ? 'subida' : actual < anterior ? 'bajada' : 'estable';
+      return {
+        id: z.id, lat: z.lat, lng: z.lng, radio_metros: z.radio_metros,
+        total_reportes: z.total_reportes, tipo_predominante: z.tipo_predominante,
+        ultima_actualizacion: z.ultima_actualizacion,
+        riesgo_semanal: Math.round(riesgoSemanal * 100) / 100,
+        nivel_riesgo: clasificarNivelRiesgo(riesgoSemanal),
+        reportes_7dias: actual,
+        reportes_hoy: Number(z.reportes_hoy),
+        tendencia,
+        principales_categorias: z.principales_categorias,
+      };
+    });
+
+    res.json(data);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Error al obtener zonas verificadas' });
   }
 });
+// Mismos sectores urbanos y radios que backend-fastapi/seed.py — estadísticas
+// en vivo por sector fijo, sin depender de que exista una zona_concentracion
+// detectada/verificada ahí.
+const ZONAS_FIJAS = [
+  { nombre: 'Socio Vivienda',            lat: -2.12214, lng: -79.95721, radio_metros: 600 },
+  { nombre: 'Monte Sinaí',               lat: -2.11542, lng: -79.97015, radio_metros: 600 },
+  { nombre: 'El Guasmo Sur',             lat: -2.26182, lng: -79.89845, radio_metros: 700 },
+  { nombre: 'Isla Trinitaria',           lat: -2.24251, lng: -79.91632, radio_metros: 600 },
+  { nombre: 'Bastión Popular',           lat: -2.09115, lng: -79.93124, radio_metros: 600 },
+  { nombre: 'Febres Cordero (Suburbio)', lat: -2.21453, lng: -79.93241, radio_metros: 600 },
+  { nombre: 'Pascuales Centro',          lat: -2.05941, lng: -79.90422, radio_metros: 600 },
+  { nombre: 'Cristo del Consuelo',       lat: -2.22635, lng: -79.91421, radio_metros: 500 },
+  { nombre: 'Sauces (Etapas 1-9)',       lat: -2.13142, lng: -79.89215, radio_metros: 600 },
+  { nombre: 'Alborada',                  lat: -2.14152, lng: -79.89942, radio_metros: 600 },
+  { nombre: 'Mucho Lote 1',              lat: -2.07841, lng: -79.91232, radio_metros: 500 },
+  { nombre: 'Puerto Santa Ana',          lat: -2.18025, lng: -79.87412, radio_metros: 400 },
+  { nombre: 'Urdesa Central',            lat: -2.16782, lng: -79.90924, radio_metros: 500 },
+  { nombre: 'Los Ceibos',                lat: -2.16853, lng: -79.93815, radio_metros: 500 },
+  { nombre: 'Kennedy Norte',             lat: -2.15842, lng: -79.89124, radio_metros: 500 },
+  { nombre: 'Barrio Centenario',         lat: -2.22741, lng: -79.89312, radio_metros: 400 },
+];
+
+// GET /api/reports/zonas-fijas — público, sin auth. Estadísticas en vivo
+// para los 16 sectores urbanos conocidos, independiente de la detección
+// automática de zonas_concentracion.
+router.get('/zonas-fijas', async (req, res) => {
+  try {
+    const data = await Promise.all(ZONAS_FIJAS.map(async (z) => {
+      const { rows: [r] } = await pool.query(`
+        SELECT
+          COALESCE((SELECT SUM(severidad) FROM reports
+            WHERE estado = 'aprobado'
+              AND created_at > NOW() - INTERVAL '${DIAS_HISTORIAL_RIESGO} days'
+              AND ST_DWithin(ubicacion, ST_MakePoint($2,$1)::geography, $3)
+          ), 0) AS riesgo_total,
+          COALESCE((SELECT COUNT(*) FROM reports
+            WHERE estado != 'rechazado'
+              AND created_at > NOW() - INTERVAL '7 days'
+              AND ST_DWithin(ubicacion, ST_MakePoint($2,$1)::geography, $3)
+          ), 0) AS reportes_7dias,
+          COALESCE((SELECT COUNT(*) FROM reports
+            WHERE estado != 'rechazado'
+              AND created_at > NOW() - INTERVAL '14 days'
+              AND created_at <= NOW() - INTERVAL '7 days'
+              AND ST_DWithin(ubicacion, ST_MakePoint($2,$1)::geography, $3)
+          ), 0) AS reportes_7dias_anterior,
+          COALESCE((SELECT COUNT(*) FROM reports
+            WHERE estado != 'rechazado'
+              AND created_at >= CURRENT_DATE
+              AND ST_DWithin(ubicacion, ST_MakePoint($2,$1)::geography, $3)
+          ), 0) AS reportes_hoy,
+          COALESCE((SELECT json_agg(tipo) FROM (
+            SELECT tipo, COUNT(*) AS n FROM reports
+            WHERE estado != 'rechazado'
+              AND created_at > NOW() - INTERVAL '${DIAS_HISTORIAL_RIESGO} days'
+              AND ST_DWithin(ubicacion, ST_MakePoint($2,$1)::geography, $3)
+            GROUP BY tipo ORDER BY n DESC LIMIT 3
+          ) t), '[]') AS principales_categorias,
+          NOW() AS ahora
+      `, [z.lat, z.lng, z.radio_metros]);
+
+      const riesgoSemanal = Number(r.riesgo_total) / SEMANAS_HISTORIAL_RIESGO;
+      const actual   = Number(r.reportes_7dias);
+      const anterior = Number(r.reportes_7dias_anterior);
+      const tendencia = actual > anterior ? 'subida' : actual < anterior ? 'bajada' : 'estable';
+
+      return {
+        nombre: z.nombre, lat: z.lat, lng: z.lng, radio_metros: z.radio_metros,
+        riesgo_semanal: Math.round(riesgoSemanal * 100) / 100,
+        nivel_riesgo: clasificarNivelRiesgo(riesgoSemanal),
+        reportes_7dias: actual,
+        reportes_hoy: Number(r.reportes_hoy),
+        tendencia,
+        principales_categorias: r.principales_categorias,
+        ultima_actualizacion: r.ahora,
+      };
+    }));
+
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener zonas fijas' });
+  }
+});
+
 // GET /api/reports/alerta-cercana?lat=..&lng=..
 router.get('/alerta-cercana', async (req, res) => {
   try {
