@@ -14,17 +14,18 @@ AVAILABLE_MODELS = {
     "knn":           "model_knn.pkl",
 }
 
-# --- Definición única de "riesgo", usada también en backend-express
-# (zonas.js / authority.js) para zonas_concentracion y el ranking de
-# Analítica. Riesgo = severidad acumulada de reportes 'aprobado' por
-# semana, dentro de una ventana fija de historial reciente. Umbrales
-# fijos (no percentiles) para que sean explicables sin depender de
-# cuántos datos hay entrenados en un momento dado — mismos números en
-# los dos backends, si se ajustan hay que cambiarlos en ambos lados.
+# Riesgo = severidad acumulada de reportes 'aprobado' por semana, PARA UNA
+# CELDA ESPACIAL Y HORA PUNTUAL (el modelo agrupa por lat/lng redondeado +
+# hora al armar el target de entrenamiento) — es una unidad distinta a la
+# de zonas.js/authority.js en backend-express, que suman TODAS las horas
+# de una zona junta. No se comparten los mismos umbrales a propósito.
+# Estos están calibrados contra la distribución real de predict-grid: el
+# máximo observado en horas pico ronda 5, así que un umbral de ALTO=10
+# nunca se alcanzaba y todo el grid salía BAJO.
 DIAS_HISTORIAL      = 180
 SEMANAS_HISTORIAL   = DIAS_HISTORIAL / 7
-UMBRAL_RIESGO_ALTO  = 10   # puntos de severidad acumulada por semana
-UMBRAL_RIESGO_MEDIO = 4
+UMBRAL_RIESGO_ALTO  = 3   # puntos de severidad acumulada por semana, por celda-hora
+UMBRAL_RIESGO_MEDIO = 1
 
 
 def clasificar_nivel(riesgo_semanal):
