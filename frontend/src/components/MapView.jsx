@@ -8,6 +8,7 @@ import 'leaflet.markercluster';
 import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown, MapPinned } from 'lucide-react';import ReportForm      from './ReportForm';
 import ReportList      from './ReportList';
 import ConfirmToast    from './ConfirmToast';
+import SubmitSuccessToast from './SubmitSuccessToast';
 import PredictPanel    from './PredictPanel';
 import AnalyticaPanel  from './AnalyticaPanel';
 import HistorialPanel  from './HistorialPanel';
@@ -59,6 +60,7 @@ export default function MapView() {
   const [reports,      setReports]      = useState([]);
   const [formPos,      setFormPos]      = useState(null);
   const [nearbyList,   setNearbyList]   = useState([]);
+  const [showSubmitSuccess, setShowSubmitSuccess] = useState(false);
   const [zonasVerificadas, setZonasVerificadas] = useState([]);
   const [zonasFijas, setZonasFijas] = useState([]);
   const [zonaSeleccionada, setZonaSeleccionada] = useState(null);
@@ -323,6 +325,7 @@ const updateMarkers = (data) => {
   const handleReportCreated = async () => {
     if (formMarker.current) { formMarker.current.remove(); formMarker.current = null; }
     setFormPos(null);
+    setShowSubmitSuccess(true);
     if (mapInstance.current) loadReports(mapInstance.current);
     if (formPos) {
       const nearby = await getNearby(formPos.lat, formPos.lng);
@@ -408,6 +411,9 @@ const updateMarkers = (data) => {
         {/* Toast de confirmación */}
         {nearbyList.length > 0 && (
           <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
+        )}
+        {showSubmitSuccess && (
+          <SubmitSuccessToast mobile onDismiss={() => setShowSubmitSuccess(false)} />
         )}
         <ProximityAlert />
         <LocateButton map={mapInstance.current} mobile={mobile} />
@@ -615,6 +621,9 @@ const updateMarkers = (data) => {
     <LocateButton map={mapInstance.current} mobile={mobile} />
     {nearbyList.length > 0 && (
       <ConfirmToast reports={nearbyList} onDismiss={() => setNearbyList([])}/>
+    )}
+    {showSubmitSuccess && (
+      <SubmitSuccessToast onDismiss={() => setShowSubmitSuccess(false)} />
     )}
     <div style={styles.legend}>
       {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
