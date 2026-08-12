@@ -101,6 +101,8 @@ const res  = await fetch(`${API}/api/geocode/place?place_id=${prediction.place_i
     setTipo(t);
     const minimo = SEVERIDAD_MINIMA_POR_TIPO[t] || 1;
     if (sev < minimo) setSev(minimo);
+    // Un homicidio no lo puede reportar la propia víctima.
+    if (t === 'Homicidio' && rol === 'victima') setRol(null);
   };
 
   const submit = async () => {
@@ -225,11 +227,13 @@ const res  = await fetch(`${API}/api/geocode/place?place_id=${prediction.place_i
             onClick={() => setRol(rol === 'testigo' ? null : 'testigo')}>
             <Eye size={12} strokeWidth={2}/> Fui testigo
           </button>
-          <button
-            style={{...styles.rolBtn,...(rol==='victima'?styles.rolBtnSel:{})}}
-            onClick={() => setRol(rol === 'victima' ? null : 'victima')}>
-            <UserX2 size={12} strokeWidth={2}/> Me pasó a mí
-          </button>
+          {tipo !== 'Homicidio' && (
+            <button
+              style={{...styles.rolBtn,...(rol==='victima'?styles.rolBtnSel:{})}}
+              onClick={() => setRol(rol === 'victima' ? null : 'victima')}>
+              <UserX2 size={12} strokeWidth={2}/> Me pasó a mí
+            </button>
+          )}
         </div>
       </div>
 
