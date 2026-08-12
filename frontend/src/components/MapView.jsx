@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown, MapPinned } from 'lucide-react';import ReportForm      from './ReportForm';
+import { Map, BarChart2, History, Plus, Clock, Thermometer, Circle, MousePointerClick, List, X, SlidersHorizontal, Route, TrendingUp, FileDown, MapPinned, ChevronDown, ChevronUp } from 'lucide-react';import ReportForm      from './ReportForm';
 import ReportList      from './ReportList';
 import ConfirmToast    from './ConfirmToast';
 import SubmitSuccessToast from './SubmitSuccessToast';
@@ -70,6 +70,7 @@ export default function MapView() {
   const [loading,      setLoading]      = useState(false);
   const [mobile,       setMobile]       = useState(isMobile());
   const [mobilePanel,  setMobilePanel]  = useState(null); // 'menu' | 'lista' | null
+  const [showLegend,   setShowLegend]   = useState(true);
   const [filtros, setFiltros] = useState({
     dias: 30,
     tipos: [],
@@ -443,10 +444,7 @@ const updateMarkers = (data) => {
           </div>
         </div>
 
-        {/* Panel de filtros móvil */}
-        <div style={{ position:'absolute', top:64, right:12, zIndex:999 }}>
-          <FilterPanel filtros={filtros} onChange={setFiltros} />
-        </div>
+        <FilterPanel filtros={filtros} onChange={setFiltros} mobile />
 
         <AddressSearch map={mapInstance.current} mobile />
 
@@ -532,39 +530,50 @@ const updateMarkers = (data) => {
           </div>
         )}
 
-        {/* Leyenda */}
+        {/* Leyenda (colapsable en móvil) */}
         <div style={mStyles.legend}>
-          {showHeat && (
-            <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #eee' }}>
-              <div style={{ height: 6, borderRadius: 3, background: 'linear-gradient(to right, rgba(239,159,39,0), #F4C542, #EF9F27, #BA7517, #E24B4A)' }}/>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: '#aaa', marginTop: 2 }}>
-                <span>Menos reportes</span>
-                <span>Más reportes</span>
+          <button
+            onClick={() => setShowLegend(v => !v)}
+            style={mStyles.legendToggle}
+          >
+            <span>Leyenda</span>
+            {showLegend ? <ChevronDown size={14} color="#888"/> : <ChevronUp size={14} color="#888"/>}
+          </button>
+          {showLegend && (
+            <>
+              {showHeat && (
+                <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #eee' }}>
+                  <div style={{ height: 6, borderRadius: 3, background: 'linear-gradient(to right, rgba(239,159,39,0), #F4C542, #EF9F27, #BA7517, #E24B4A)' }}/>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, color: '#aaa', marginTop: 2 }}>
+                    <span>Menos reportes</span>
+                    <span>Más reportes</span>
+                  </div>
+                </div>
+              )}
+              {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
+                <div key={tipo} style={mStyles.legendItem}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:color,flexShrink:0}}/>
+                  <span>{tipo}</span>
+                </div>
+              ))}
+              <div style={mStyles.legendItem}>
+                <div style={{width:8,height:8,borderRadius:'50%',border:'2px dashed #534AB7',flexShrink:0}}/>
+                <span>Zona verificada</span>
               </div>
-            </div>
+              <div style={mStyles.legendItem}> {/* o styles.legendItem en desktop */}
+                <span style={{ fontSize: 9 }}>⭐</span>
+                <span>Reportante confiable</span>
+              </div>
+              <div style={mStyles.legendItem}>
+                <span style={{ fontSize: 9 }}>👥</span>
+                <span>Verificado por ciudadanía (5+ confirmaron)</span>
+              </div>
+              <div style={mStyles.legendItem}>
+                <span style={{ fontSize: 9 }}>🛡️</span>
+                <span>Verificado por Autoridad y ciudadanía</span>
+              </div>
+            </>
           )}
-          {Object.entries(TIPO_COLORS).map(([tipo, color]) => (
-            <div key={tipo} style={mStyles.legendItem}>
-              <div style={{width:8,height:8,borderRadius:'50%',background:color,flexShrink:0}}/>
-              <span>{tipo}</span>
-            </div>
-          ))}
-          <div style={mStyles.legendItem}>
-            <div style={{width:8,height:8,borderRadius:'50%',border:'2px dashed #534AB7',flexShrink:0}}/>
-            <span>Zona verificada</span>
-          </div>
-          <div style={mStyles.legendItem}> {/* o styles.legendItem en desktop */}
-            <span style={{ fontSize: 9 }}>⭐</span>
-            <span>Reportante confiable</span>
-          </div>
-          <div style={mStyles.legendItem}>
-            <span style={{ fontSize: 9 }}>👥</span>
-            <span>Verificado por ciudadanía (5+ confirmaron)</span>
-          </div>
-          <div style={mStyles.legendItem}>
-            <span style={{ fontSize: 9 }}>🛡️</span>
-            <span>Verificado por Autoridad y ciudadanía</span>
-          </div>
         </div>
 
         {/* Tab bar inferior */}
@@ -750,7 +759,8 @@ const mStyles = {
   countBadge:        { background:'#E24B4A', color:'#fff', fontSize:'12px', fontWeight:700, padding:'2px 8px', borderRadius:'10px' },
   loading:           { position:'absolute', top:'60px', left:'50%', transform:'translateX(-50%)', background:'#fff', padding:'6px 14px', borderRadius:'20px', fontSize:'12px', boxShadow:'0 2px 8px rgba(0,0,0,.15)', zIndex:1000 },
   formOverlay:       { position:'absolute', top:'60px', left:'50%', transform:'translateX(-50%)', zIndex:2000, width:'calc(100vw - 32px)', maxWidth:'320px' },
-  legend:            { position:'absolute', bottom:'90px', left:'12px', zIndex:1000, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(8px)', borderRadius:'8px', padding:'6px 8px', display:'flex', flexDirection:'column', gap:'3px' },
+  legend:            { position:'absolute', bottom:'90px', left:'12px', zIndex:1000, background:'rgba(255,255,255,0.92)', backdropFilter:'blur(8px)', borderRadius:'8px', padding:'6px 8px', display:'flex', flexDirection:'column', gap:'3px', maxWidth:'150px' },
+  legendToggle:      { display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', background:'none', border:'none', padding:0, margin:0, cursor:'pointer', fontSize:'10px', fontWeight:700, color:'#555', textTransform:'uppercase', letterSpacing:'.03em' },
   legendItem:        { display:'flex', alignItems:'center', gap:'5px', fontSize:'10px', color:'#555' },
   bottomSheet:       { position:'absolute', bottom:'72px', left:0, right:0, zIndex:1500, background:'#fff', borderRadius:'16px 16px 0 0', boxShadow:'0 -4px 20px rgba(0,0,0,.15)', maxHeight:'60vh', display:'flex', flexDirection:'column' },
   bottomSheetHandle: { width:'36px', height:'4px', background:'#eee', borderRadius:'2px', margin:'10px auto 0' },
