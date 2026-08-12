@@ -237,14 +237,17 @@ const updateMarkers = (data) => {
 
   dataFiltrada.forEach(r => {
     const color  = TIPO_COLORS[r.tipo] || '#888';
-    const esPend = r.estado === 'pendiente';
     const esConfiable = r.reputacion_puntos >= 130;
-    // "Verificado" tiene dos fuentes independientes que no se mezclan con el
-    // estado de moderación: 5+ confirmaciones de otros ciudadanos es una señal
-    // social, distinta de que la Autoridad haya aprobado el reporte. Ninguna
-    // reemplaza a la otra — solo se muestran juntas si coinciden.
+    // Validación colectiva: 5+ confirmaciones de otros ciudadanos es una
+    // fuente de validación tan legítima como la aprobación de la Autoridad,
+    // no un premio de consolación mientras se espera al moderador. Por eso
+    // el punto deja de verse "pendiente" con cualquiera de las dos, no solo
+    // con la de Autoridad — si no, el mapa contradice el propio discurso de
+    // que la validación es colectiva.
     const verifCiudadania = r.confirmaciones >= 5;
     const verifAutoridad  = r.estado === 'aprobado';
+    const esVerificado    = verifAutoridad || verifCiudadania;
+    const esPend = !esVerificado;
 
     const icon   = L.divIcon({
       className:'',
