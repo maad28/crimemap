@@ -1,8 +1,9 @@
 //frontend/src/pages/AutoridadAlertas.jsx
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Check, Zap, UserX, FileDown, FileText, Ban, ShieldOff } from 'lucide-react';
+import { AlertTriangle, Check, Zap, UserX, FileDown, FileText, Ban, ShieldOff, MapPin, Clock } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import MapModal from '../components/MapModal';
 
 const API = `${import.meta.env.VITE_API_EXPRESS || 'http://localhost:3001'}/api/authority`;
 
@@ -20,6 +21,7 @@ export default function AutoridadAlertas({ secret }) {
   const [loading, setLoading] = useState(true);
   const [bloqueando, setBloqueando] = useState(new Set());
   const [bloqueados, setBloqueados] = useState(new Set());
+  const [mapaAbierto, setMapaAbierto] = useState(null);
 
   const headers = { 'x-authority-secret': secret };
 
@@ -51,9 +53,13 @@ export default function AutoridadAlertas({ secret }) {
     }
   };
 
-  const resumenAlerta = (a) => a.tipo_alerta === 'rafaga_temporal'
-    ? `${a.detalle.total_reportes} reportes de tipo "${a.detalle.tipo}" en 500m en 10 min, ${a.detalle.dispositivos_involucrados.length} dispositivos`
-    : `Dispositivo de ${a.detalle.minutos_desde_creacion} min ya acumuló ${a.detalle.confirmaciones_recibidas} confirmaciones`;
+  const resumenAlerta = (a) => {
+    if (a.tipo_alerta === 'rafaga_temporal')
+      return `${a.detalle.total_reportes} reportes de tipo "${a.detalle.tipo}" en 500m en 10 min, ${a.detalle.dispositivos_involucrados.length} dispositivos`;
+    if (a.tipo_alerta === 'limite_frecuencia')
+      return `Dispositivo excedió el límite de reportes (${a.detalle.total_reportes_recientes} en 15 min)`;
+    return `Dispositivo de ${a.detalle.minutos_desde_creacion} min ya acumuló ${a.detalle.confirmaciones_recibidas} confirmaciones`;
+  };
 
   const descargarCSV = () => {
     if (!alertas.length) return;
@@ -138,11 +144,13 @@ export default function AutoridadAlertas({ secret }) {
         {alertas.map(a => (
           <div key={a.id} style={styles.card}>
             <div style={styles.cardTop}>
-              {a.tipo_alerta === 'rafaga_temporal'
-                ? <Zap size={16} color="#BA7517" strokeWidth={2}/>
-                : <UserX size={16} color="#E24B4A" strokeWidth={2}/>}
+              {a.tipo_alerta === 'rafaga_temporal' && <Zap size={16} color="#BA7517" strokeWidth={2}/>}
+              {a.tipo_alerta === 'dispositivo_nuevo_actividad_alta' && <UserX size={16} color="#E24B4A" strokeWidth={2}/>}
+              {a.tipo_alerta === 'limite_frecuencia' && <Clock size={16} color="#534AB7" strokeWidth={2}/>}
               <span style={styles.tipoLabel}>
-                {a.tipo_alerta === 'rafaga_temporal' ? 'Ráfaga temporal' : 'Dispositivo nuevo sospechoso'}
+                {a.tipo_alerta === 'rafaga_temporal' && 'Ráfaga temporal'}
+                {a.tipo_alerta === 'dispositivo_nuevo_actividad_alta' && 'Dispositivo nuevo sospechoso'}
+                {a.tipo_alerta === 'limite_frecuencia' && 'Límite de frecuencia excedido'}
               </span>
               <span style={styles.time}>{timeAgo(a.created_at)}</span>
             </div>
@@ -153,6 +161,13 @@ export default function AutoridadAlertas({ secret }) {
                   {a.detalle.total_reportes} reportes de tipo "{a.detalle.tipo}" en 500m
                   en los últimos 10 minutos, involucrando {a.detalle.dispositivos_involucrados.length} dispositivos distintos.
                 </p>
+                {a.detalle.lat != null && a.detalle.lng != null && (
+                  <button
+                    onClick={() => setMapaAbierto({ lat: a.detalle.lat, lng: a.detalle.lng, tipo: a.detalle.tipo })}
+                    style={styles.mapBtn}>
+                    <MapPin size={12}/> Ver zona en mapa
+                  </button>
+                )}
                 <div style={styles.hashList}>
                   {a.detalle.dispositivos_involucrados.map(hash => (
                     <div key={hash} style={styles.hashRow}>
@@ -168,12 +183,35 @@ export default function AutoridadAlertas({ secret }) {
                   ))}
                 </div>
               </>
+            ) : a.tipo_alerta === 'limite_frecuencia' ? (
+              <p style={styles.detalle}>
+                Dispositivo hizo {a.detalle.total_reportes_recientes} reportes en 15 minutos
+                y fue bloqueado de crear más hasta que baje el ritmo.
+                (hash: {(a.detalle.device_hash || '?').slice(0, 16)}...)
+              </p>
             ) : (
               <p style={styles.detalle}>
                 Dispositivo con {a.detalle.minutos_desde_creacion} minutos de antigüedad
                 ya acumuló {a.detalle.confirmaciones_recibidas} confirmaciones.
                 (hash: {(a.detalle.device_hash || a.detalle.device_hash_parcial || '?').slice(0, 16)}...)
               </p>
+            )}
+
+            {a.detalle.reportes?.length > 0 && (
+              <div style={styles.reportesList}>
+                <span style={styles.reportesLabel}>Reportes de este dispositivo:</span>
+                {a.detalle.reportes.map(r => (
+                  <div key={r.id} style={styles.reporteRow}>
+                    <span style={styles.reporteTipo}>{r.tipo}</span>
+                    <span style={styles.reporteTime}>{timeAgo(r.created_at)}</span>
+                    <button
+                      onClick={() => setMapaAbierto({ lat: r.lat, lng: r.lng, tipo: r.tipo })}
+                      style={styles.mapBtnSmall}>
+                      <MapPin size={11}/> Ver
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
 
             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
@@ -196,6 +234,15 @@ export default function AutoridadAlertas({ secret }) {
           </div>
         ))}
       </div>
+
+      {mapaAbierto && (
+        <MapModal
+          lat={mapaAbierto.lat}
+          lng={mapaAbierto.lng}
+          tipo={mapaAbierto.tipo}
+          onClose={() => setMapaAbierto(null)}
+        />
+      )}
     </div>
   );
 }
@@ -218,4 +265,11 @@ const styles = {
   hash:         { fontSize: 11, fontFamily: 'monospace', color: '#666' },
   blockBtnSmall:{ display: 'flex', alignItems: 'center', gap: 4, background: '#fff0f0', color: '#E24B4A', border: '1px solid #f5d5d5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', flexShrink: 0 },
   bloqueadoTag: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#E24B4A', fontWeight: 600 },
+  mapBtn:       { display: 'flex', alignItems: 'center', gap: 5, background: '#f2f0fb', color: '#534AB7', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginBottom: 8 },
+  reportesList: { display: 'flex', flexDirection: 'column', gap: 4, margin: '6px 0 10px', background: '#fafafa', borderRadius: 8, padding: '6px 8px' },
+  reportesLabel:{ fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 2 },
+  reporteRow:   { display: 'flex', alignItems: 'center', gap: 8 },
+  reporteTipo:  { fontSize: 12, color: '#333', flex: 1 },
+  reporteTime:  { fontSize: 11, color: '#aaa' },
+  mapBtnSmall:  { display: 'flex', alignItems: 'center', gap: 3, background: '#f2f0fb', color: '#534AB7', border: 'none', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer', flexShrink: 0 },
 };

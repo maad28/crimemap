@@ -15,6 +15,7 @@ const TIPOS = [
 export default function FilterPanel({ filtros, onChange, mobile }) {
   const [abierto, setAbierto] = useState(false);
   const posDerecha = mobile ? 16 : 264;
+  const posArriba  = mobile ? 116 : 16; // debajo de la barra de búsqueda de dirección
 
   const toggleTipo = (tipo) => {
     const nuevos = filtros.tipos.includes(tipo)
@@ -39,7 +40,7 @@ export default function FilterPanel({ filtros, onChange, mobile }) {
   }
 
   return (
-    <div style={{ ...styles.panel, right: posDerecha }}>
+    <div style={{ ...styles.panel, right: posDerecha, top: posArriba }}>
       <div style={styles.header}>
         <strong>Filtros</strong>
         <button onClick={() => setAbierto(false)} style={styles.closeBtn}><X size={18} /></button>
@@ -104,7 +105,11 @@ const styles = {
   // importar en qué layout (móvil/escritorio) se rendericen.
   // bottom:206 dejar un hueco de 8px sobre LocateButton (bottom:156, alto 42 → borde superior en 198)
   fab:    { position: 'fixed', bottom: 206, zIndex: 1000, background: '#1a1a1a', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,.2)' },
-  panel:  { position: 'fixed', bottom: 206, zIndex: 1000, background: '#fff', borderRadius: 14, padding: 16, width: 240, maxHeight: '70vh', overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,.15)' },
+  // top+bottom (no maxHeight en vh) para que la altura real se limite al hueco
+  // entre la barra de búsqueda y los botones flotantes, sin importar el alto
+  // real de pantalla; zIndex por encima de AddressSearch (1000) para que no
+  // quede tapado por la barra de búsqueda al abrirse.
+  panel:  { position: 'fixed', bottom: 206, zIndex: 1100, background: '#fff', borderRadius: 14, padding: 16, width: 240, overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,.15)' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer' },
   section: { marginBottom: 14 },

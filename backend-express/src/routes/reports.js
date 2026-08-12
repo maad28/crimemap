@@ -25,6 +25,7 @@ const {
   detectarRafaga,
   excedeLimiteFrecuencia,
   detectarDispositivoNuevoSospechoso,
+  detectarLimiteFrecuencia,
 } = require('../services/reputacion');
 
 router.get('/', async (req, res) => {
@@ -123,6 +124,8 @@ router.post('/', async (req, res) => {
 
     // ← AQUÍ VA EL NUEVO CHEQUEO DE FRECUENCIA
     if (await excedeLimiteFrecuencia(device_hash)) {
+      // Que este bloqueo quede visible para Autoridad, no solo silencioso para el reportante.
+      detectarLimiteFrecuencia(device_hash).catch(err => console.error('Error registrando alerta de frecuencia:', err));
       return res.status(429).json({ error: 'Demasiados reportes en poco tiempo. Espera unos minutos.' });
     }
 

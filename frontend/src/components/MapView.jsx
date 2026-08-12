@@ -375,6 +375,7 @@ const updateMarkers = (data) => {
     if (activeTab==='historial')  return <HistorialPanel map={mapInstance.current}/>;
     if (activeTab==='ruta')       return <SafeRoutePanel map={mapInstance.current}/>;
     if (activeTab==='reportes-export') return <ReportesExport/>;
+    if (activeTab==='analitica-avanzada') return <AnalyticsDashboard/>;
     if (activeTab==='zonas') return (
       <div style={{ padding: 14 }}>
         <div style={{ fontSize:13, fontWeight:600, color:'#1a1a1a', marginBottom:10 }}>Zonas de Guayaquil</div>

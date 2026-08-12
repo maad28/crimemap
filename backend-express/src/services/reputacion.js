@@ -74,6 +74,19 @@ async function excedeLimiteFrecuencia(device_hash) {
   return Number(rows[0].total) >= 3;
 }
 
+async function reportesRecientesDeDispositivo(device_hash, limite = 5) {
+  const { rows } = await pool.query(`
+    SELECT id, tipo,
+           ST_Y(ubicacion::geometry) AS lat, ST_X(ubicacion::geometry) AS lng,
+           created_at
+    FROM reports
+    WHERE device_hash = $1
+    ORDER BY created_at DESC
+    LIMIT $2
+  `, [device_hash, limite]);
+  return rows;
+}
+
 async function registrarAlerta(tipo_alerta, detalle) {
   await pool.query(`
     INSERT INTO alertas_sospecha (tipo_alerta, detalle)
@@ -138,11 +151,44 @@ async function detectarDispositivoNuevoSospechoso(device_hash) {
       // Hash completo para permitir bloquear el dispositivo desde la alerta;
       // la UI solo muestra un prefijo truncado (igual que en el panel de Reputación).
       device_hash,
+      // Reportes reales del dispositivo, para que Autoridad pueda ver dónde
+      // y qué se reportó, no solo el hash.
+      reportes: await reportesRecientesDeDispositivo(device_hash),
     };
     await registrarAlerta('dispositivo_nuevo_actividad_alta', alerta);
     return alerta;
   }
   return { sospechoso: false };
+}
+
+// --- Detección 2d: límite de frecuencia excedido ---
+// El dispositivo ya fue bloqueado de crear un reporte más por exceder
+// excedeLimiteFrecuencia (3+ reportes en 15 min). Esto no es una simple
+// protección silenciosa: queda registrado para que Autoridad lo revise,
+// con los reportes reales que generó para saber dónde ocurrió.
+async function detectarLimiteFrecuencia(device_hash) {
+  // Evita spamear una alerta nueva cada vez que el mismo dispositivo reintenta
+  // mientras sigue bloqueado por frecuencia — solo una por hora sin revisar.
+  const { rows: existentes } = await pool.query(`
+    SELECT id FROM alertas_sospecha
+    WHERE tipo_alerta = 'limite_frecuencia'
+      AND revisada = false
+      AND detalle->>'device_hash' = $1
+      AND created_at > NOW() - INTERVAL '1 hour'
+    LIMIT 1
+  `, [device_hash]);
+  if (existentes.length) return { sospechoso: true, motivo: 'limite_frecuencia', duplicada: true };
+
+  const reportes = await reportesRecientesDeDispositivo(device_hash, 10);
+  const alerta = {
+    sospechoso: true,
+    motivo: 'limite_frecuencia',
+    device_hash,
+    total_reportes_recientes: reportes.length,
+    reportes,
+  };
+  await registrarAlerta('limite_frecuencia', alerta);
+  return alerta;
 }
 
 async function bloquearManualmente(device_hash) {
@@ -168,6 +214,7 @@ module.exports = {
   excedeLimiteFrecuencia,
   detectarRafaga,
   detectarDispositivoNuevoSospechoso,
+  detectarLimiteFrecuencia,
   bloquearManualmente,
   desbloquearManualmente,
 };

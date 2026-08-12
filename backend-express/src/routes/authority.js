@@ -8,10 +8,10 @@ const { ajustarPorAprobacion, ajustarPorRechazo, bloquearManualmente, desbloquea
 router.use(authorityAuth);
 
 const ORDEN_REPORTES = {
-  recientes:           'created_at DESC',
-  antiguos:             'created_at ASC',
-  severidad_desc:       'severidad DESC, created_at DESC',
-  confirmaciones_desc:  'confirmaciones DESC, created_at DESC',
+  recientes:           'created_at DESC, id DESC',
+  antiguos:             'created_at ASC, id ASC',
+  severidad_desc:       'severidad DESC, created_at DESC, id DESC',
+  confirmaciones_desc:  'confirmaciones DESC, created_at DESC, id DESC',
 };
 const ordenReportesSql = (orden) => ORDEN_REPORTES[orden] || ORDEN_REPORTES.recientes;
 
@@ -22,6 +22,17 @@ const ORDEN_ZONAS = {
   antiguas:   'primera_deteccion ASC',
 };
 const ordenZonasSql = (orden) => ORDEN_ZONAS[orden] || ORDEN_ZONAS.total_desc;
+
+const ORDEN_REPUTACION = {
+  puntos_asc:      'puntos ASC',
+  puntos_desc:      'puntos DESC',
+  rechazos_desc:    'reportes_rechazados DESC, puntos ASC',
+  aprobados_desc:   'reportes_aprobados DESC',
+  reportes_desc:    'reportes_totales DESC',
+  recientes:        'primera_actividad DESC',
+  antiguos:         'primera_actividad ASC',
+};
+const ordenReputacionSql = (orden) => ORDEN_REPUTACION[orden] || ORDEN_REPUTACION.puntos_asc;
 
 router.get('/pendientes', async (req, res) => {
   try {
@@ -302,12 +313,13 @@ router.get('/reputacion', async (req, res) => {
   try {
     const soloBloqueados = req.query.bloqueados === 'true';
     const where = soloBloqueados ? 'WHERE bloqueado = true' : '';
+    const orderBy = ordenReputacionSql(req.query.orden);
     const { rows } = await pool.query(`
       SELECT device_hash, puntos, reportes_totales, reportes_aprobados,
              reportes_rechazados, bloqueado, primera_actividad
       FROM reputacion_dispositivo
       ${where}
-      ORDER BY puntos ASC
+      ORDER BY ${orderBy}
     `);
     res.json(rows);
   } catch (err) {

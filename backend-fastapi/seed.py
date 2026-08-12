@@ -27,13 +27,13 @@ ZONAS_URBANAS = [
     ("Isla Trinitaria",             -2.24251, -79.91632, 0.6, 0.13, "alta"),
     ("Bastión Popular",             -2.09115, -79.93124, 0.6, 0.11, "alta"),
     ("Febres Cordero (Suburbio)",   -2.21453, -79.93241, 0.6, 0.11, "alta"),
+    ("Pascuales Centro",            -2.05941, -79.90422, 0.6, 0.11, "alta"),   # antes: media, 0.05
+    ("Mucho Lote 1",                -2.07841, -79.91232, 0.5, 0.13, "alta"),  # antes: media, 0.04; subido de 0.10 — con 0.10 quedaba justo debajo del umbral ALTO (39.12/40)
 
     # --- NIVEL MEDIO ---
-    ("Pascuales Centro",            -2.05941, -79.90422, 0.6, 0.05, "media"),
     ("Cristo del Consuelo",         -2.22635, -79.91421, 0.5, 0.05, "media"),
     ("Sauces (Etapas 1-9)",         -2.13142, -79.89215, 0.6, 0.05, "media"),
     ("Alborada",                    -2.14152, -79.89942, 0.6, 0.04, "media"),
-    ("Mucho Lote 1",                -2.07841, -79.91232, 0.5, 0.04, "media"),
 
     # --- NIVEL BAJO ---
     ("Puerto Santa Ana",            -2.18025, -79.87412, 0.4, 0.02, "baja"),
@@ -116,7 +116,11 @@ def gen_timestamp():
         range(24),
         weights=[1,1,1,1,1,1,2,4,4,3,3,3,3,3,3,3,4,5,6,6,5,4,3,2]
     )[0]
-    dia  = random.randint(0, 180)
+    # dia tope en 179 (no 180): sumado a hora=23/minuto=59 en el peor caso,
+    # el resultado queda siempre antes de "ahora" — con 180 el resultado
+    # podía pasarse hasta ~24h al futuro y ganarle en orden a un reporte
+    # real recién creado (ORDER BY created_at DESC en Autoridad > Incidentes).
+    dia  = random.randint(0, 179)
     return base + timedelta(days=dia, hours=hora, minutes=random.randint(0,59))
 
 
