@@ -91,7 +91,7 @@ router.get('/nearby', async (req, res) => {
   try {
     const { lat, lng, radius = 500 } = req.query;
     const { rows } = await pool.query(
-      `SELECT id, tipo, confirmaciones, severidad, descripcion, estado,
+      `SELECT id, tipo, confirmaciones, severidad, descripcion, estado, created_at,
               ST_Y(ubicacion::geometry) AS lat,
               ST_X(ubicacion::geometry) AS lng,
               ST_Distance(ubicacion, ST_MakePoint($2,$1)::geography) AS distancia_metros

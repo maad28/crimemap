@@ -1,6 +1,21 @@
 //Users/mac/crimemap/frontend/src/components/ConfirmToast.jsx
-import { MapPin, Check, X, AlertTriangle } from 'lucide-react';
+import { MapPin, Check, X, AlertTriangle, Clock } from 'lucide-react';
 import { confirmReport } from '../api/reports';
+
+function timeAgo(dateStr) {
+  const diff = (Date.now() - new Date(dateStr)) / 1000;
+  if (diff < 60)    return 'ahora';
+  if (diff < 3600)  return `hace ${Math.floor(diff/60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff/3600)} h`;
+  return `hace ${Math.floor(diff/86400)} d`;
+}
+
+function formatFechaHora(dateStr) {
+  const d = new Date(dateStr);
+  const dia  = d.toLocaleDateString('es-EC', { day: '2-digit', month: 'short' });
+  const hora = d.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
+  return `${dia}, ${hora}`;
+}
 
 const TIPO_ICONS = {
   'Robo a persona':      '🔴',
@@ -53,6 +68,13 @@ export default function ConfirmToast({ reports, onDismiss }) {
             {'●'.repeat(first.severidad)}{'○'.repeat(5 - first.severidad)}
           </span>
         </div>
+
+        {first.created_at && (
+          <div style={styles.fecha}>
+            <Clock size={10} strokeWidth={2} />
+            <span>{timeAgo(first.created_at)} · {formatFechaHora(first.created_at)}</span>
+          </div>
+        )}
 
         {first.descripcion && (
           <p style={styles.descripcion}>
@@ -122,6 +144,10 @@ const styles = {
   },
   severidad: {
     color: '#E24B4A', fontSize: '10px', letterSpacing: '1px'
+  },
+  fecha: {
+    display: 'flex', alignItems: 'center', gap: '4px',
+    color: '#999', fontSize: '10px', marginTop: '2px',
   },
   descripcion: {
     margin: '4px 0 0', color: '#666', fontSize: '11px',
